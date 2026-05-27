@@ -1,0 +1,1 @@
+public required object? {{ name }} { get; init; }

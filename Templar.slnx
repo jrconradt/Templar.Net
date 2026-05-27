@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Templar.csproj" />
+    <Project Path="src/Templar.Generators/Templar.Generators.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Templar.Tests.csproj" />
+  </Folder>
+</Solution>

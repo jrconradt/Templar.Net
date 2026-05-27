@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup>
+    <AdditionalFiles Include="@(EmbeddedResource)"
+                     Condition="'%(EmbeddedResource.Extension)' == '.tpl'" />
+    <CompilerVisibleProperty Include="RootNamespace" />
+    <CompilerVisibleProperty Include="ProjectDir" />
+  </ItemGroup>
+</Project>
