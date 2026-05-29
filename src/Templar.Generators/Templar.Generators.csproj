@@ -17,11 +17,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" PrivateAssets="all" />
-    <ProjectReference Include="../Templar.csproj" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Emit\**\*.tpl" />
     <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
     <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
   </ItemGroup>

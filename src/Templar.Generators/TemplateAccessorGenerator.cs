@@ -6,8 +6,6 @@ using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
-using Templar.Rendering;
-using Templar.Generators.Emit;
 
 namespace Templar.Generators;
 
@@ -52,20 +50,18 @@ public sealed class TemplateAccessorGenerator : IIncrementalGenerator
         var ns = string.Join(".", new[] { rootNs }.Concat(new[] { "Templates" }).Concat(location.FolderSegments));
         var className = Identifier.Sanitize(location.LeafName);
 
-        var properties = new Lines
-        {
-            Items = tpl.Placeholders.Select(p => (Compositor)new Property { Name = Identifier.Pascal(p) })
-        };
+        var properties = string.Join("\n",
+            tpl.Placeholders.Select(p => $"    public required object? {Identifier.Pascal(p)} {{ get; init; }}"));
+        var body = properties.Length > 0 ? $"\n{properties}\n" : "\n";
 
-        var file = new CompositorFile
-        {
-            Namespace = ns,
-            ClassName = className,
-            Properties = properties,
-        };
+        var source = "#nullable enable\n\n"
+            + $"namespace {ns};\n\n"
+            + "[global::System.CodeDom.Compiler.GeneratedCode(\"Templar.Generators\", \"1.0.0\")]\n"
+            + $"public sealed class {className} : global::Templar.Rendering.Compositor\n"
+            + "{" + body + "}\n";
 
         var fileName = "Templates." + string.Join(".", location.FolderSegments.Concat(new[] { className })) + ".g.cs";
-        return (fileName, file.Render());
+        return (fileName, source);
     }
 
     private sealed record TemplateInput(string Path, IReadOnlyList<string> Placeholders);
