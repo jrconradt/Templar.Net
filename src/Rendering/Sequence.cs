@@ -7,8 +7,6 @@ public abstract class Sequence : Compositor
 
     internal string SeparatorInternal => Separator;
 
-    protected override string Structure => string.Empty;
-
     public override string Render()
     {
         string result = "";

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `Templar.UI` — a server-rendered markup component toolkit on top of the
+  Templar engine. `UIComponent` (a `Compositor` that HTML-escapes text by
+  default), `Element` + the `H` element factory (generated from the
+  `Elements.elements` data table), and a `Document` page preset. Styling is
+  compositional, not imperative: a style is a micro-template that contributes
+  class tokens, and an element's classes are a `ClassList` (a space-joined
+  `Sequence`) — composition is the merge. Elements carry a `DefaultClass` that
+  composes with, rather than replaces, the caller's classes. `Attr` builds
+  escaped, scheme-sanitized attributes; `H.Inline`/`Fragment`/`Text` compose
+  prose with inline markup; `<pre>`/`<textarea>` use a verbatim layout that
+  escapes content without reindenting it. Zero dependencies, trim- and AOT-safe.
+  See [_docs/ui.md](_docs/ui.md).
+- Templar.UI is safe-by-default against XSS/injection: tag names and attribute
+  names are validated, `on*` event-handler attributes are blocked, URL-context
+  attribute values (`href`, `src`, …) with `javascript:`/`vbscript:`/`data:`
+  schemes (including control-char-obfuscated) are neutralized to
+  `about:invalid#blocked`, and the `attrs` slot rejects raw strings. Unsafe
+  input throws `MarkupSecurityException` (fail closed). The only unescaped paths
+  are the explicit `Html.Raw`, `{{& }}`, and `RawContent` opt-outs.
+- `Templar.UI.Generators` — `ElementFactoryGenerator` (emits the `H` factory
+  from `.elements` tables) and `HtmlComponentGenerator` (turns `.html.tpl` files
+  into strongly-typed `UIComponent` subclasses, typing each placeholder as
+  `string`, `RawHtml`, or `Compositor?` from its marker).
+- Engine: `RenderOptions.Escape` (an optional `Func<string,string>` applied to
+  interpolated text), the `IRawContent` marker interface (values written raw,
+  never escaped), the `IVerbatimContent` marker interface (values written with
+  literal newlines and no per-line reindentation), and two placeholder markers —
+  `{{& x }}` (raw, unescaped) and `{{> x }}` (slot). All default-off, so existing
+  code-generation output is unchanged.
+
+### Fixed
+- `Sequence` items after the first now inherit the placeholder's column when the
+  separator ends in a newline, so multi-item sequences nested at an indented
+  position stay aligned (previously only the first item was indented).
+
 ## [1.0.0]
 
 Initial production release.

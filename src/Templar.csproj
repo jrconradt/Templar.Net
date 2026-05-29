@@ -30,6 +30,12 @@
     <Compile Remove="Templar.Generators\**" />
     <EmbeddedResource Remove="Templar.Generators\**" />
     <None Remove="Templar.Generators\**" />
+    <Compile Remove="Templar.UI\**" />
+    <EmbeddedResource Remove="Templar.UI\**" />
+    <None Remove="Templar.UI\**" />
+    <Compile Remove="Templar.UI.Generators\**" />
+    <EmbeddedResource Remove="Templar.UI.Generators\**" />
+    <None Remove="Templar.UI.Generators\**" />
   </ItemGroup>
 
   <Target Name="EnsureGeneratorBuilt" BeforeTargets="GenerateNuspec">
@@ -41,6 +47,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Presets\**\*.tpl" />
     <InternalsVisibleTo Include="Templar.Tests" />
+    <InternalsVisibleTo Include="Templar.UI" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\LICENSE" Pack="true" PackagePath="\" />
     <None Include="build\Templar.targets" Pack="true" PackagePath="build\" />

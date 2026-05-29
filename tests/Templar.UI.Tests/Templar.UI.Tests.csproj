@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <RootNamespace>Templar.UI.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
@@ -15,19 +16,13 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Fixtures\Sample.tpl" />
-    <EmbeddedResource Include="Fixtures\Solo.tpl" LogicalName="Solo.tpl" />
-    <EmbeddedResource Include="Fixtures\notes.txt" />
+    <ProjectReference Include="..\..\src\Templar.UI\Templar.UI.csproj" />
+    <ProjectReference Include="..\..\src\Templar.UI.Generators\Templar.UI.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Remove="Templar.UI.Tests\**" />
-    <EmbeddedResource Remove="Templar.UI.Tests\**" />
-    <None Remove="Templar.UI.Tests\**" />
-    <Compile Remove="Templar.UI.Generators.Tests\**" />
-    <EmbeddedResource Remove="Templar.UI.Generators.Tests\**" />
-    <None Remove="Templar.UI.Generators.Tests\**" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\src\Templar.csproj" />
+    <CompilerVisibleProperty Include="RootNamespace" />
+    <AdditionalFiles Include="Components\Card.html.tpl" />
   </ItemGroup>
 </Project>

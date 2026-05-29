@@ -131,6 +131,7 @@ Long-form docs live in [`_docs/`](_docs/):
 | [templates.md](_docs/templates.md) | Constructing, filling, and rendering a single template. |
 | [composition.md](_docs/composition.md) | `Compositor`, `Sequence`, attributes, the `CSharpFile` preset. |
 | [integration.md](_docs/integration.md) | `TemplateSet`, embedded resources, filter/options propagation, generators. |
+| [ui.md](_docs/ui.md) | `Templar.UI` — server-rendered HTML/XML/SVG component toolkit with auto-escaping. |
 
 ## Build & Test
 

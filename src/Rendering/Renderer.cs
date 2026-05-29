@@ -149,6 +149,39 @@ internal static class Renderer
             }
         }
 
+        void WriteVerbatim(string val, string nl)
+        {
+            lineHadExpression = true;
+            if (val.Length == 0)
+            {
+                return;
+            }
+            if (val.Contains('\r'))
+            {
+                val = val.Replace("\r\n", "\n").Replace('\r', '\n');
+            }
+
+            EnsureIndent();
+            int start = 0;
+            while (true)
+            {
+                int next = val.IndexOf('\n', start);
+                int lineEnd = next < 0 ? val.Length : next;
+                if (lineEnd > start)
+                {
+                    output += val[start..lineEnd];
+                }
+                if (next < 0)
+                {
+                    break;
+                }
+                output += nl;
+                atLineStart = false;
+                lineStart = output.Length;
+                start = next + 1;
+            }
+        }
+
         int SkipPastEnd(string src, int from)
         {
             int depth = 0;
@@ -365,7 +398,10 @@ internal static class Renderer
                     && s[p + 1] == '{')
                 {
                     char marker = (p + 2 < s.Length) ? s[p + 2] : '\0';
-                    int contentStart = (marker == '#' || marker == '?') ? p + 3 : p + 2;
+                    bool markerConsumed = marker == '#' || marker == '?'
+                        || marker == '&'
+                        || marker == '>';
+                    int contentStart = markerConsumed ? p + 3 : p + 2;
                     int closePos = s.IndexOf("}}",
                                              contentStart,
                                              StringComparison.Ordinal);
@@ -404,6 +440,8 @@ internal static class Renderer
                         continue;
                     }
 
+                    bool rawTag = marker == '&';
+                    var esc = scan.Options.Escape;
                     string varName;
                     string? filterName = null;
                     int pipeIdx = body.IndexOf('|');
@@ -430,6 +468,10 @@ internal static class Renderer
                     if (filterName is not null)
                     {
                         var filtered = scan.Filters.Apply(filterName, value, varName);
+                        if (!rawTag && esc is not null)
+                        {
+                            filtered = esc(filtered);
+                        }
                         EnsureIndent();
                         output += filtered;
                         continue;
@@ -439,9 +481,19 @@ internal static class Renderer
                     {
                         continue;
                     }
+                    if (value is IVerbatimContent verbatimContent)
+                    {
+                        WriteVerbatim(verbatimContent.Value, nl);
+                        continue;
+                    }
+                    if (value is IRawContent rawContent)
+                    {
+                        WriteValueString(rawContent.Value, nl);
+                        continue;
+                    }
                     if (value is string sval)
                     {
-                        WriteValueString(sval, nl);
+                        WriteValueString((!rawTag && esc is not null) ? esc(sval) : sval, nl);
                         continue;
                     }
 
@@ -523,11 +575,13 @@ internal static class Renderer
 
                     if (value is IEnumerable<string> strs)
                     {
-                        WriteValueString(string.Join(nl, strs), nl);
+                        string joined = string.Join(nl, strs);
+                        WriteValueString((!rawTag && esc is not null) ? esc(joined) : joined, nl);
                         continue;
                     }
 
-                    WriteValueString(value.ToString() ?? "", nl);
+                    string fallback = value.ToString() ?? "";
+                    WriteValueString((!rawTag && esc is not null) ? esc(fallback) : fallback, nl);
                     continue;
                 }
 
@@ -545,16 +599,18 @@ internal static class Renderer
                     {
                         currentIndent = currentIndent[..^seq.PushedIndent.Length];
                     }
-                    if (stack.Count == 0)
-                    {
-                        return output;
-                    }
                     current = stack.Pop();
                     continue;
                 }
                 if (!seq.First)
                 {
                     output += seq.Separator;
+                    if (seq.Separator.EndsWith('\n'))
+                    {
+                        atLineStart = true;
+                        lineStart = output.Length;
+                        lineHadExpression = false;
+                    }
                 }
                 seq.First = false;
                 var child = seq.Items.Current;

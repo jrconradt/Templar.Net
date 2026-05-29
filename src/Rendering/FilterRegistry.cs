@@ -28,14 +28,6 @@ internal sealed class FilterRegistry
 
     internal IReadOnlyDictionary<string, Func<object?, string>> All => _filters;
 
-    internal FilterRegistry Clone()
-    {
-        var clone = new FilterRegistry();
-        foreach (var kvp in _filters)
-            clone._filters[kvp.Key] = kvp.Value;
-        return clone;
-    }
-
     private static string ToPascalCase(string input)
     {
         if (input.Length == 0) return input;

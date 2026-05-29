@@ -2,8 +2,12 @@
   <Folder Name="/src/">
     <Project Path="src/Templar.csproj" />
     <Project Path="src/Templar.Generators/Templar.Generators.csproj" />
+    <Project Path="src/Templar.UI/Templar.UI.csproj" />
+    <Project Path="src/Templar.UI.Generators/Templar.UI.Generators.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Templar.Tests.csproj" />
+    <Project Path="tests/Templar.UI.Tests/Templar.UI.Tests.csproj" />
+    <Project Path="tests/Templar.UI.Generators.Tests/Templar.UI.Generators.Tests.csproj" />
   </Folder>
 </Solution>

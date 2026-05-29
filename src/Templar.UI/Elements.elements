@@ -1,0 +1,38 @@
+# Templar.UI element table — the single source of truth for the H factory.
+# Grammar:  name [name ...] : layout [: default-classes]
+#   layout         = block | inline | void
+#   default-classes = class tokens this element wears by default (composed with,
+#                     not replaced by, the caller's classes). Shipped empty here
+#                     so the stock elements carry no style opinion; set them when
+#                     authoring a styled component set.
+# Classes are passed through the `classes` argument and merged with the default.
+# Other attributes go through the raw `attrs` slot or a bespoke .html.tpl
+# component with escaped placeholders.
+
+# structural blocks
+div section article header footer nav main aside : block
+figure figcaption blockquote address details summary dialog : block
+p hgroup : block
+
+# whitespace-sensitive (content escaped, never reindented)
+pre textarea : verbatim
+
+# headings
+h1 h2 h3 h4 h5 h6 : block
+
+# lists
+ul ol li dl dt dd menu : block
+
+# tables
+table caption colgroup thead tbody tfoot tr td th : block
+
+# forms
+form fieldset legend label select option optgroup datalist output progress meter button : block
+
+# inline text
+span strong em b i u s small mark sub sup del ins code kbd samp var abbr cite q dfn bdi bdo ruby rt rp data a : inline
+time : inline
+
+# void
+br hr wbr : void
+meta col embed param track source img input link : void

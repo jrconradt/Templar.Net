@@ -56,7 +56,10 @@ public sealed class Template
             {
                 int openLine = line, openCol = col;
                 char marker = (p + 2 < text.Length) ? text[p + 2] : '\0';
-                int contentStart = (marker == '#' || marker == '?') ? p + 3 : p + 2;
+                bool markerConsumed = marker == '#' || marker == '?'
+                    || marker == '&'
+                    || marker == '>';
+                int contentStart = markerConsumed ? p + 3 : p + 2;
                 int close = text.IndexOf("}}",
                                          contentStart,
                                          StringComparison.Ordinal);
@@ -173,7 +176,6 @@ public sealed class Template
                                _options);
     }
 
-    internal string SourceInternal => _source;
     internal IDictionary<string, object?> ValuesInternal => _values;
     internal FilterRegistry FiltersInternal => _filters;
     internal RenderOptions OptionsInternal => _options;

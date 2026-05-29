@@ -6,11 +6,6 @@ public sealed class TemplateRenderException : Exception
     public string? FilterName { get; }
     public string? VariableName { get; }
 
-    public TemplateRenderException(string message, string? templateName = null) : base(message)
-    {
-        TemplateName = templateName;
-    }
-
     public TemplateRenderException(
         string message,
         string? filterName,
