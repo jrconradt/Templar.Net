@@ -47,7 +47,6 @@
   <ItemGroup>
     <EmbeddedResource Include="Presets\**\*.tpl" />
     <InternalsVisibleTo Include="Templar.Tests" />
-    <InternalsVisibleTo Include="Templar.UI" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\LICENSE" Pack="true" PackagePath="\" />
     <None Include="build\Templar.targets" Pack="true" PackagePath="build\" />

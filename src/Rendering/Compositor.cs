@@ -46,13 +46,20 @@ public abstract class Compositor
                                options);
     }
 
+    protected virtual void Validate()
+    {
+    }
+
+    protected virtual RenderOptions ResolveOptions() => _options;
+
     internal virtual void Compile(out string source,
                                   out IDictionary<string, object?> values,
                                   out FilterRegistry filters,
                                   out RenderOptions options)
     {
+        Validate();
         source = Structure;
-        var template = Template.Parse(source).WithOptions(_options);
+        var template = Template.Parse(source).WithOptions(ResolveOptions());
         Populate(template);
         values = template.ValuesInternal;
         filters = template.FiltersInternal;
