@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Templar</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <PackageId>Templar</PackageId>
+    <Title>Templar</Title>
+    <Description>Indentation-aware template engine for C# code generation. Multi-line values automatically inherit the column position of the placeholder, so generated code stays correctly formatted at any nesting depth.</Description>
+    <PackageTags>codegen;template;source-generator;code-generation;text-template</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/jrconradt/Templar.Net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jrconradt/Templar.Net.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Templar.Generators\**" />
+    <EmbeddedResource Remove="Templar.Generators\**" />
+    <None Remove="Templar.Generators\**" />
+    <Compile Remove="Templar.UI\**" />
+    <EmbeddedResource Remove="Templar.UI\**" />
+    <None Remove="Templar.UI\**" />
+    <Compile Remove="Templar.UI.Generators\**" />
+    <EmbeddedResource Remove="Templar.UI.Generators\**" />
+    <None Remove="Templar.UI.Generators\**" />
+  </ItemGroup>
+
+  <Target Name="EnsureGeneratorBuilt" BeforeTargets="GenerateNuspec">
+    <MSBuild Projects="Templar.Generators/Templar.Generators.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)" />
+  </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Presets\**\*.tpl" />
+    <InternalsVisibleTo Include="Templar.Tests" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\NOTICE" Pack="true" PackagePath="\" />
+    <None Include="build\Templar.targets" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\Templar.targets" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="Templar.Generators\bin\$(Configuration)\net10.0\Templar.Generators.dll"
+          Pack="true"
+          PackagePath="analyzers\dotnet\cs\"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Templar.UI</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <PackageId>Templar.UI</PackageId>
+    <Title>Templar.UI</Title>
+    <Description>Server-rendered HTML component toolkit built on Templar. Components compose into correctly-indented markup with automatic, safe-by-default escaping — validated tags and attributes, sanitized URL schemes, and blocked event handlers. Trim- and AOT-safe, with no third-party dependencies.</Description>
+    <PackageTags>html;ssr;components;markup;templating;codegen</PackageTags>
+    <PackageProjectUrl>https://github.com/jrconradt/Templar.Net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jrconradt/Templar.Net.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>ui.md</PackageReadmeFile>
+
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Templar.csproj" />
+    <ProjectReference Include="../Templar.UI.Generators/Templar.UI.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <InternalsVisibleTo Include="Templar.UI.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="Elements.elements" />
+  </ItemGroup>
+
+  <Target Name="EnsureGeneratorBuilt" BeforeTargets="GenerateNuspec">
+    <MSBuild Projects="..\Templar.UI.Generators\Templar.UI.Generators.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)" />
+  </Target>
+
+  <ItemGroup>
+    <None Include="..\..\_docs\ui.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\NOTICE" Pack="true" PackagePath="\" />
+    <None Include="build\Templar.UI.targets" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\Templar.UI.targets" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="..\Templar.UI.Generators\bin\$(Configuration)\net10.0\Templar.UI.Generators.dll"
+          Pack="true"
+          PackagePath="analyzers\dotnet\cs\"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>
