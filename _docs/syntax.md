@@ -136,7 +136,7 @@ Output:
     }
 ```
 
-The continuation lines of `body` are padded to column 8 (the column where `{{ body }}` started), preserving the relative indentation within the value itself. This works at arbitrary nesting depths.
+The continuation lines of `body` are padded to the indent depth where `{{ body }}` started, preserving the relative indentation within the value itself. The padding is built from whole `RenderOptions.IndentString` units (four spaces by default; set it to `"\t"` for tab-indented output), so the inherited indentation is rendered in the same unit as the rest of the document. This works at arbitrary nesting depths.
 
 ## Newline Handling
 

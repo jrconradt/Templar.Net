@@ -1,4 +1,5 @@
 using Templar.UI;
+using Templar.UI.Tests.Components;
 using Xunit;
 
 namespace Templar.UI.Tests;
@@ -11,8 +12,8 @@ public class GeneratedComponentTests
         var card = new Card
         {
             Title = "Hi <there>",
-            BodyHtml = Html.Raw("<p>raw &amp; ready</p>"),
-            Footer = H.Span("footer"),
+            BodyHtml = Markup.Raw("<p>raw &amp; ready</p>"),
+            Footer = Markup.Span("footer"),
         };
 
         var html = card.Render();

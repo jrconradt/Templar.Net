@@ -25,7 +25,7 @@ public sealed class TemplateAccessorGenerator : IIncrementalGenerator
             .Select((at, ct) =>
             {
                 var text = at.GetText(ct)?.ToString() ?? string.Empty;
-                return new TemplateInput(at.Path, PlaceholderScanner.Scan(text));
+                return new TemplateInput(at.Path, text, PlaceholderScanner.Scan(text));
             });
 
         var combined = templates.Combine(rootNs.Combine(projDir));
@@ -50,21 +50,44 @@ public sealed class TemplateAccessorGenerator : IIncrementalGenerator
         var ns = string.Join(".", new[] { rootNs }.Concat(new[] { "Templates" }).Concat(location.FolderSegments));
         var className = Identifier.Sanitize(location.LeafName);
 
+        var structure = $"    protected override string Structure => \"{EscapeLiteral(tpl.Text)}\";\n";
+
         var properties = string.Join("\n",
-            tpl.Placeholders.Select(p => $"    public required object? {Identifier.Pascal(p)} {{ get; init; }}"));
+            tpl.Placeholders.Select(p => $"    public required object? {Identifier.UpperFirst(p)} {{ get; init; }}"));
         var body = properties.Length > 0 ? $"\n{properties}\n" : "\n";
 
         var source = "#nullable enable\n\n"
             + $"namespace {ns};\n\n"
             + "[global::System.CodeDom.Compiler.GeneratedCode(\"Templar.Generators\", \"1.0.0\")]\n"
             + $"public sealed class {className} : global::Templar.Rendering.Compositor\n"
-            + "{" + body + "}\n";
+            + "{\n"
+            + structure
+            + body
+            + "}\n";
 
         var fileName = "Templates." + string.Join(".", location.FolderSegments.Concat(new[] { className })) + ".g.cs";
         return (fileName, source);
     }
 
-    private sealed record TemplateInput(string Path, IReadOnlyList<string> Placeholders);
+    private static string EscapeLiteral(string s)
+    {
+        return string.Concat(s.Select(EscapeChar));
+    }
+
+    private static string EscapeChar(char c)
+    {
+        return c switch
+        {
+            '\\' => "\\\\",
+            '"' => "\\\"",
+            '\n' => "\\n",
+            '\r' => "\\r",
+            '\t' => "\\t",
+            _ => $"{c}",
+        };
+    }
+
+    private sealed record TemplateInput(string Path, string Text, IReadOnlyList<string> Placeholders);
 
     private sealed class TemplateLocation
     {
@@ -76,9 +99,13 @@ public sealed class TemplateAccessorGenerator : IIncrementalGenerator
         {
             var full = Path.GetFullPath(absolutePath);
             var dir = Path.GetFullPath(projectDir);
-            if (!full.StartsWith(dir, StringComparison.OrdinalIgnoreCase)) return null;
+            var dirWithSep = dir.EndsWith($"{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                          || dir.EndsWith($"{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal)
+                ? dir
+                : dir + Path.DirectorySeparatorChar;
+            if (!full.StartsWith(dirWithSep, StringComparison.OrdinalIgnoreCase)) return null;
 
-            var rel = full.Substring(dir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var rel = full.Substring(dirWithSep.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var noExt = rel.Substring(0, rel.Length - 4);
             var parts = noExt.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 2 || !string.Equals(parts[0], "Templates", StringComparison.Ordinal)) return null;

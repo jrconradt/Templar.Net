@@ -18,7 +18,7 @@ public abstract class UIComponent : Compositor
             IndentString = options.IndentString,
             Newline = options.Newline,
             StrictUndefined = options.StrictUndefined,
-            Escape = Html.Escape,
+            Escape = Markup.Escape,
         };
     }
 }

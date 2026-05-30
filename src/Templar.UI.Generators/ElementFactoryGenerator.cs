@@ -27,7 +27,7 @@ public sealed class ElementFactoryGenerator : IIncrementalGenerator
             {
                 return;
             }
-            spc.AddSource("H.g.cs", SourceText.From(Emit(defs), Encoding.UTF8));
+            spc.AddSource("Markup.g.cs", SourceText.From(Emit(defs), Encoding.UTF8));
         });
     }
 
@@ -75,7 +75,7 @@ public sealed class ElementFactoryGenerator : IIncrementalGenerator
         var header = "#nullable enable\n\n"
             + "namespace Templar.UI;\n\n"
             + "[global::System.CodeDom.Compiler.GeneratedCode(\"Templar.UI.Generators\", \"1.0.0\")]\n"
-            + "public static partial class H\n{\n";
+            + "public static partial class Markup\n{\n";
 
         return header + string.Join("\n", methods) + "\n}\n";
     }

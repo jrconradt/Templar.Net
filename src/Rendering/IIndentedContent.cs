@@ -1,6 +1,6 @@
 namespace Templar.Rendering;
 
-public interface IRawContent
+public interface IIndentedContent
 {
     string Value { get; }
 }

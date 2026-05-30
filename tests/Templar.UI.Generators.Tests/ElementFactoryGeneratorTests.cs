@@ -7,14 +7,14 @@ public class ElementFactoryGeneratorTests
     private static string Run(string table)
     {
         var map = GeneratorHarness.Run(new ElementFactoryGenerator(), new[] { ("Elements.elements", table) });
-        return map.TryGetValue("H.g.cs", out var s) ? s : "";
+        return map.TryGetValue("Markup.g.cs", out var s) ? s : "";
     }
 
     [Fact]
     public void Empty_table_produces_no_output()
     {
         var map = GeneratorHarness.Run(new ElementFactoryGenerator(), new[] { ("Elements.elements", "# only a comment\n\n") });
-        Assert.False(map.ContainsKey("H.g.cs"));
+        Assert.False(map.ContainsKey("Markup.g.cs"));
     }
 
     [Fact]
@@ -81,6 +81,6 @@ public class ElementFactoryGeneratorTests
     [Fact]
     public void Generated_class_is_partial()
     {
-        Assert.Contains("public static partial class H", Run("div : block"));
+        Assert.Contains("public static partial class Markup", Run("div : block"));
     }
 }

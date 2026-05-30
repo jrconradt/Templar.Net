@@ -12,7 +12,7 @@ public class EngineCoverageTests
         protected override string Structure => "{{ v }}";
     }
 
-    private sealed class Verb : IVerbatimContent
+    private sealed class Verb : IPreformattedContent
     {
         public Verb(string value)
         {
@@ -22,7 +22,7 @@ public class EngineCoverageTests
         public string Value { get; }
     }
 
-    private sealed class Raw : IRawContent
+    private sealed class Raw : IIndentedContent
     {
         public Raw(string value)
         {

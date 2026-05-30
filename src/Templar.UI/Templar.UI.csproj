@@ -46,6 +46,8 @@
 
   <ItemGroup>
     <None Include="..\..\_docs\ui.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\NOTICE" Pack="true" PackagePath="\" />
     <None Include="build\Templar.UI.targets" Pack="true" PackagePath="build\" />
     <None Include="buildTransitive\Templar.UI.targets" Pack="true" PackagePath="buildTransitive\" />
     <None Include="..\Templar.UI.Generators\bin\$(Configuration)\net10.0\Templar.UI.Generators.dll"

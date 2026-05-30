@@ -5,7 +5,7 @@ namespace Templar.Tests;
 
 public class EscapeAndRawTests
 {
-    private sealed class Raw : IRawContent
+    private sealed class Raw : IIndentedContent
     {
         public Raw(string value)
         {
@@ -53,11 +53,19 @@ public class EscapeAndRawTests
     }
 
     [Fact]
-    public void Slot_marker_renders_variable()
+    public void Slot_marker_writes_value_raw_without_escaping()
     {
         var t = Template.Parse("{{> slot }}").WithOptions(Escaping);
-        t["slot"] = "plain";
-        Assert.Equal("plain", t.Render());
+        t["slot"] = "<b>&</b>";
+        Assert.Equal("<b>&</b>", t.Render());
+    }
+
+    [Fact]
+    public void Non_bool_non_string_non_enumerable_value_is_truthy_in_conditional()
+    {
+        var t = Template.Parse("{{? n }}yes{{?else}}no{{?}}");
+        t["n"] = 42;
+        Assert.Equal("yes", t.Render());
     }
 
     [Fact]

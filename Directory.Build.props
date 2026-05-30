@@ -4,9 +4,9 @@
     <Deterministic>true</Deterministic>
     <LangVersion>latest</LangVersion>
     <Version>1.0.0</Version>
-    <Authors>Infalligence Labs &lt;hello@infalligence.com&gt;</Authors>
-    <Company>Infalligence Labs</Company>
-    <Copyright>Copyright 2026 Infalligence Labs · Apache-2.0 with enterprise license available</Copyright>
+    <Authors>Infalligence Labs LLC &lt;hello@infalligence.com&gt;</Authors>
+    <Company>Infalligence Labs LLC</Company>
+    <Copyright>Copyright (c) Infalligence Labs LLC</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
   </PropertyGroup>
 

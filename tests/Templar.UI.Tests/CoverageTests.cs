@@ -15,7 +15,7 @@ public class CoverageTests
     [Fact]
     public void Html_options_sets_newline_and_escape()
     {
-        var options = Html.Options("\r\n", "  ");
+        var options = Markup.Options("\r\n", "  ");
         Assert.Equal("\r\n", options.Newline);
         Assert.Equal("  ", options.IndentString);
         Assert.NotNull(options.Escape);
@@ -25,7 +25,7 @@ public class CoverageTests
     [Fact]
     public void RawHtml_to_string_and_of()
     {
-        Assert.Equal("<x>", Html.Raw("<x>").ToString());
+        Assert.Equal("<x>", Markup.Raw("<x>").ToString());
         Assert.Equal("<y>", RawHtml.Of("<y>").Value);
     }
 
@@ -43,7 +43,7 @@ public class CoverageTests
             Tag = "pre",
             Layout = ElementLayout.Verbatim,
             RawContent = true,
-            Children = Html.Raw("<x>"),
+            Children = Markup.Raw("<x>"),
         };
         Assert.Equal("<pre><x></pre>", element.Render());
     }
@@ -55,7 +55,7 @@ public class CoverageTests
         {
             Tag = "pre",
             Layout = ElementLayout.Verbatim,
-            Children = H.Span("hi"),
+            Children = Markup.Span("hi"),
         };
         Assert.Equal("<pre>&lt;span&gt;hi&lt;/span&gt;</pre>", element.Render());
     }
@@ -109,14 +109,14 @@ public class CoverageTests
     public void Attrs_raw_with_leading_space_is_not_doubled()
     {
         Assert.Equal("<div id=\"x\"></div>",
-            new Element { Tag = "div", Layout = ElementLayout.Inline, Attrs = Html.Raw(" id=\"x\""), Children = "" }.Render());
+            new Element { Tag = "div", Layout = ElementLayout.Inline, Attrs = Markup.Raw(" id=\"x\""), Children = "" }.Render());
     }
 
     [Fact]
     public void Attrs_empty_raw_renders_nothing()
     {
         Assert.Equal("<div></div>",
-            new Element { Tag = "div", Layout = ElementLayout.Inline, Attrs = Html.Raw(""), Children = "" }.Render());
+            new Element { Tag = "div", Layout = ElementLayout.Inline, Attrs = Markup.Raw(""), Children = "" }.Render());
     }
 
     [Fact]

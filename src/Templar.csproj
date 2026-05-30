@@ -49,6 +49,7 @@
     <InternalsVisibleTo Include="Templar.Tests" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\NOTICE" Pack="true" PackagePath="\" />
     <None Include="build\Templar.targets" Pack="true" PackagePath="build\" />
     <None Include="buildTransitive\Templar.targets" Pack="true" PackagePath="buildTransitive\" />
     <None Include="Templar.Generators\bin\$(Configuration)\net10.0\Templar.Generators.dll"

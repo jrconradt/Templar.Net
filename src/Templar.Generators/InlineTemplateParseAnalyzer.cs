@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Templar.Generators;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class RawTemplateParseAnalyzer : DiagnosticAnalyzer
+public sealed class InlineTemplateParseAnalyzer : DiagnosticAnalyzer
 {
     public static readonly DiagnosticDescriptor Rule = new(
         id: "TMPLR001",
@@ -30,16 +30,34 @@ public sealed class RawTemplateParseAnalyzer : DiagnosticAnalyzer
     private static void Analyze(SyntaxNodeAnalysisContext ctx)
     {
         var invocation = (InvocationExpressionSyntax)ctx.Node;
-        if (invocation.Expression is not MemberAccessExpressionSyntax member) return;
-        if (member.Name.Identifier.Text != "Parse") return;
+        if (invocation.Expression is not MemberAccessExpressionSyntax member)
+        {
+            return;
+        }
+        if (member.Name.Identifier.Text != "Parse")
+        {
+            return;
+        }
 
         var symbol = ctx.SemanticModel.GetSymbolInfo(invocation, ctx.CancellationToken).Symbol;
-        if (symbol is not IMethodSymbol method) return;
-        if (method.ContainingType?.ToDisplayString() != "Templar.Template") return;
-        if (invocation.ArgumentList.Arguments.Count == 0) return;
+        if (symbol is not IMethodSymbol method)
+        {
+            return;
+        }
+        if (method.ContainingType?.ToDisplayString() != "Templar.Rendering.Template")
+        {
+            return;
+        }
+        if (invocation.ArgumentList.Arguments.Count == 0)
+        {
+            return;
+        }
 
         var arg = invocation.ArgumentList.Arguments[0].Expression;
-        if (!IsStringLiteralLike(arg)) return;
+        if (!IsStringLiteralLike(arg))
+        {
+            return;
+        }
 
         ctx.ReportDiagnostic(Diagnostic.Create(Rule, invocation.GetLocation()));
     }

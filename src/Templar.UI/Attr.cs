@@ -10,7 +10,7 @@ public sealed class Attr : UIComponent
     public string? Value { get; init; }
 
     [TemplateIgnore]
-    public bool Boolean { get; init; }
+    public bool Valueless { get; init; }
 
     protected override void Validate()
     {
@@ -28,7 +28,7 @@ public sealed class Attr : UIComponent
             }
             if (Safety.IsUrlAttribute(Name))
             {
-                return Safety.SanitizeUrl(Value);
+                return Safety.SanitizeUrl(Name, Value);
             }
             return Value;
         }
@@ -38,7 +38,7 @@ public sealed class Attr : UIComponent
     {
         get
         {
-            if (Boolean)
+            if (Valueless)
             {
                 return " {{ name }}";
             }

@@ -17,6 +17,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Templar.csproj" />
     <ProjectReference Include="..\..\src\Templar.UI.Generators\Templar.UI.Generators.csproj" />
     <ProjectReference Include="..\..\src\Templar.Generators\Templar.Generators.csproj" />
   </ItemGroup>

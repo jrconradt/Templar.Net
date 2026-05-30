@@ -30,7 +30,7 @@ public sealed class Element : UIComponent
     public bool RawContent { get; init; }
 
     [TemplateBind("classes")]
-    public ClassList Classes => new() { Items = BuildClasses() };
+    public ClassList RenderedClasses => new() { Items = BuildClasses() };
 
     public bool HasClasses => BuildClasses().Count > 0;
 
@@ -38,13 +38,13 @@ public sealed class Element : UIComponent
     public object? AttrsMarkup => BuildAttrs();
 
     [TemplateBind("body")]
-    public IVerbatimContent? Body => Layout == ElementLayout.Verbatim
+    public IPreformattedContent? Body => Layout == ElementLayout.Verbatim
         ? new Verbatim(VerbatimText())
-        : (IVerbatimContent?)null;
+        : (IPreformattedContent?)null;
 
     protected override string Structure => Layout switch
     {
-        ElementLayout.Void => "<{{ tag }}{{? hasClasses }} class=\"{{ classes }}\"{{?}}{{ attrs }} />",
+        ElementLayout.Void => "<{{ tag }}{{? hasClasses }} class=\"{{ classes }}\"{{?}}{{ attrs }}>",
         ElementLayout.Inline => "<{{ tag }}{{? hasClasses }} class=\"{{ classes }}\"{{?}}{{ attrs }}>{{ children }}</{{ tag }}>",
         ElementLayout.Verbatim => "<{{ tag }}{{? hasClasses }} class=\"{{ classes }}\"{{?}}{{ attrs }}>{{ body }}</{{ tag }}>",
         _ => """
@@ -63,7 +63,7 @@ public sealed class Element : UIComponent
     private string VerbatimText()
     {
         string content = ContentToString(Children);
-        return RawContent ? content : Html.Escape(content);
+        return RawContent ? content : Markup.Escape(content);
     }
 
     private static string ContentToString(object? children)
@@ -76,7 +76,7 @@ public sealed class Element : UIComponent
         {
             return s;
         }
-        if (children is IRawContent raw)
+        if (children is IIndentedContent raw)
         {
             return raw.Value;
         }
@@ -153,7 +153,7 @@ public sealed class Element : UIComponent
             return new Fragment { Items = fragments };
         }
         throw new MarkupSecurityException(
-            "Element.Attrs must be an Attr, a sequence of Attr, or Html.Raw(...) for trusted markup. A plain string is rejected to prevent attribute injection.");
+            "Element.Attrs must be an Attr, a sequence of Attr, or Markup.Raw(...) for trusted markup. A plain string is rejected to prevent attribute injection.");
     }
 
     private static RawHtml Normalize(RawHtml attrs)
@@ -163,6 +163,6 @@ public sealed class Element : UIComponent
         {
             return attrs;
         }
-        return Html.Raw($" {value}");
+        return Markup.Raw($" {value}");
     }
 }

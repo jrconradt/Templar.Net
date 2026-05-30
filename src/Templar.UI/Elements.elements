@@ -1,4 +1,4 @@
-# Templar.UI element table — the single source of truth for the H factory.
+# Templar.UI element table — the single source of truth for the Markup factory.
 # Grammar:  name [name ...] : layout [: default-classes]
 #   layout         = block | inline | void
 #   default-classes = class tokens this element wears by default (composed with,

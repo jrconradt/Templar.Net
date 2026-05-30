@@ -2,7 +2,7 @@ using Templar.Rendering;
 
 namespace Templar.UI;
 
-public readonly struct Verbatim : IVerbatimContent
+public readonly struct Verbatim : IPreformattedContent
 {
     private readonly string? _value;
 

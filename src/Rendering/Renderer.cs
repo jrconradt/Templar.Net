@@ -80,6 +80,29 @@ internal static class Renderer
             }
         }
 
+        string BuildIndent(int width)
+        {
+            if (width <= 0)
+            {
+                return "";
+            }
+            string unit = options.IndentString;
+            if (unit.Length == 0)
+            {
+                return new string(' ', width);
+            }
+            string indent = "";
+            while (indent.Length + unit.Length <= width)
+            {
+                indent += unit;
+            }
+            if (indent.Length < width)
+            {
+                indent += new string(' ', width - indent.Length);
+            }
+            return indent;
+        }
+
         void WriteLiteralChar(char ch, string nl)
         {
             if (ch == '\n')
@@ -117,7 +140,7 @@ internal static class Renderer
             EnsureIndent();
             int col = output.Length - lineStart;
             string extra = col > currentIndent.Length
-                ? new string(' ', col - currentIndent.Length)
+                ? BuildIndent(col - currentIndent.Length)
                 : "";
             currentIndent += extra;
 
@@ -440,7 +463,8 @@ internal static class Renderer
                         continue;
                     }
 
-                    bool rawTag = marker == '&';
+                    bool rawTag = marker == '&'
+                        || marker == '>';
                     var esc = scan.Options.Escape;
                     string varName;
                     string? filterName = null;
@@ -481,14 +505,14 @@ internal static class Renderer
                     {
                         continue;
                     }
-                    if (value is IVerbatimContent verbatimContent)
+                    if (value is IPreformattedContent preformattedContent)
                     {
-                        WriteVerbatim(verbatimContent.Value, nl);
+                        WriteVerbatim(preformattedContent.Value, nl);
                         continue;
                     }
-                    if (value is IRawContent rawContent)
+                    if (value is IIndentedContent indentedContent)
                     {
-                        WriteValueString(rawContent.Value, nl);
+                        WriteValueString(indentedContent.Value, nl);
                         continue;
                     }
                     if (value is string sval)
@@ -507,7 +531,7 @@ internal static class Renderer
                             col1 = output.Length - lineStart;
                         }
                         string extra1 = col1 > currentIndent.Length
-                            ? new string(' ', col1 - currentIndent.Length)
+                            ? BuildIndent(col1 - currentIndent.Length)
                             : "";
                         currentIndent += extra1;
                         stack.Push(scan);
@@ -530,7 +554,7 @@ internal static class Renderer
                             col2 = output.Length - lineStart;
                         }
                         string extra2 = col2 > currentIndent.Length
-                            ? new string(' ', col2 - currentIndent.Length)
+                            ? BuildIndent(col2 - currentIndent.Length)
                             : "";
                         currentIndent += extra2;
                         co.Compile(out var cs,
@@ -560,7 +584,7 @@ internal static class Renderer
                             col3 = output.Length - lineStart;
                         }
                         string extra3 = col3 > currentIndent.Length
-                            ? new string(' ', col3 - currentIndent.Length)
+                            ? BuildIndent(col3 - currentIndent.Length)
                             : "";
                         currentIndent += extra3;
                         stack.Push(scan);

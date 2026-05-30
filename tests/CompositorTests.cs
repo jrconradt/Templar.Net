@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Templar.Rendering;
 using Xunit;
 
@@ -5,6 +7,22 @@ namespace Templar.Tests;
 
 public class CompositorTests
 {
+    [Theory]
+    [InlineData("_bindCache")]
+    [InlineData("_structureCache")]
+    public void TypeKeyedCachesUseNonPinningWeakKeys(string fieldName)
+    {
+        var field = typeof(Compositor).GetField(fieldName,
+                                                 BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(field);
+        var cache = field!.GetValue(null);
+        Assert.NotNull(cache);
+        Assert.True(cache!.GetType().IsGenericType);
+        Assert.Equal(typeof(ConditionalWeakTable<,>),
+                     cache.GetType().GetGenericTypeDefinition());
+    }
+
+
     private class SimpleComposite : Compositor
     {
         public string Name { get; init; } = "";

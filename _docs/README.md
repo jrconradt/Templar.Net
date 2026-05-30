@@ -31,6 +31,7 @@ string" to "I want to wire this into a build" is to read them in this order:
 | `CSharpFile` preset                              | [composition.md](composition.md#worked-preset--csharpfile) |
 | `TemplateSet` — directories, embedded resources, filter/options propagation | [integration.md](integration.md) |
 | Bulk render / generator patterns                 | [integration.md](integration.md#patterns)       |
+| `.tpl` accessor generator (`Templates/*.tpl` → typed `Compositor`) | [integration.md](integration.md#the-tpl-accessor-generator) |
 
 ## Source pointers
 
@@ -44,4 +45,5 @@ string" to "I want to wire this into a build" is to read them in this order:
 | Parser (`Template.Validate`)         | `src/Template.cs`                         |
 | Renderer + filters                   | `src/Rendering/`                          |
 | `Sequence` / `Lines` / `BlankLines` / `CommaList` | `src/Sequence.cs`            |
+| `TemplateAccessorGenerator` (`.tpl` → typed `Compositor`) | `src/Templar.Generators/` |
 | Test corpus (behavior contract)      | `tests/`                                  |

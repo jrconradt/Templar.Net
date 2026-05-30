@@ -12,7 +12,7 @@ internal static class Identifier
         return char.IsDigit(safe[0]) ? "_" + safe : safe;
     }
 
-    public static string Pascal(string s)
+    public static string UpperFirst(string s)
     {
         var safe = Sanitize(s);
         return safe.Length > 0 && char.IsLower(safe[0])

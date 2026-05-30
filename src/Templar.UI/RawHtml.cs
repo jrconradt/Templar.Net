@@ -2,7 +2,7 @@ using Templar.Rendering;
 
 namespace Templar.UI;
 
-public readonly struct RawHtml : IRawContent
+public readonly struct RawHtml : IIndentedContent
 {
     private readonly string? _value;
 

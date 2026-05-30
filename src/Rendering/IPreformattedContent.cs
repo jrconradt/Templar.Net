@@ -1,6 +1,6 @@
 namespace Templar.Rendering;
 
-public interface IVerbatimContent
+public interface IPreformattedContent
 {
     string Value { get; }
 }

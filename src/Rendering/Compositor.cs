@@ -1,18 +1,18 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Templar.Rendering;
 
 [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.NonPublicProperties)]
 public abstract class Compositor
 {
-    private static readonly ConcurrentDictionary<Type, BindablePropertyInfo[]> _bindCache = new();
-    private static readonly ConcurrentDictionary<Type, string> _structureCache = new();
+    private static readonly ConditionalWeakTable<Type, BindablePropertyInfo[]> _bindCache = new();
+    private static readonly ConditionalWeakTable<Type, string> _structureCache = new();
 
     private RenderOptions _options = new();
 
-    protected virtual string Structure => _structureCache.GetOrAdd(GetType(), LoadStructureFromConvention);
+    protected virtual string Structure => _structureCache.GetValue(GetType(), LoadStructureFromConvention);
 
     protected virtual void Populate(Template template)
     {
@@ -20,7 +20,7 @@ public abstract class Compositor
         if (!_bindCache.TryGetValue(key, out var bindables))
         {
             bindables = BuildBindables(key);
-            _bindCache[key] = bindables;
+            _bindCache.AddOrUpdate(key, bindables);
         }
         foreach (var b in bindables)
         {

@@ -47,7 +47,7 @@ public class UIComponentTests
         var html = new Document
         {
             Title = "Home",
-            Body = H.P("hi"),
+            Body = Markup.P("hi"),
         }.Render();
 
         Assert.Contains("<!DOCTYPE html>", html);

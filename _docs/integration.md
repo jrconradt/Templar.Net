@@ -170,6 +170,102 @@ every `Get` inherits, or on a `Compositor` via `WithOptions`, or on a
 the configured newline end-to-end (literal text, multi-line value injection,
 and the join used for `IEnumerable<string>` values).
 
+## The `.tpl` accessor generator
+
+`TemplateAccessorGenerator` (in `src/Templar.Generators/`) turns each `.tpl`
+file you place under a project-relative `Templates/` folder into a strongly
+typed `Compositor` subclass, so you bind template variables through named C#
+properties instead of string keys. It is the file-on-disk analog of the
+class-driven generator pattern above — you write the template text once and the
+generator writes the class.
+
+### What it generates
+
+For `Templates/Card.tpl`:
+
+```
+Hello {{ who }} and {{ place }}
+```
+
+the generator emits, into the `<RootNamespace>.Templates` namespace:
+
+```csharp
+#nullable enable
+
+namespace App.Templates;
+
+[global::System.CodeDom.Compiler.GeneratedCode("Templar.Generators", "1.0.0")]
+public sealed class Card : global::Templar.Rendering.Compositor
+{
+    public required object? Who { get; init; }
+    public required object? Place { get; init; }
+}
+```
+
+Each distinct `{{ placeholder }}` becomes a `required object?` property named in
+PascalCase; the property auto-binds back to its placeholder by name through the
+`Compositor` binding layer. A template with no placeholders emits the class with
+no properties. The generated class does **not** override `Structure`, so at
+render time it loads its template text from the embedded resource matching its
+`FullName` (see [composition.md](composition.md)) — which is why the same `.tpl`
+must be wired as **both** an `AdditionalFiles` entry (so the generator can scan
+its placeholders at compile time) and an `EmbeddedResource` (so the rendered
+class can find its body at runtime).
+
+### Folder layout drives the namespace
+
+The folder path under `Templates/` extends the namespace; the file's leaf name
+(sanitized to a valid identifier) is the class name.
+
+| `.tpl` path                     | Generated type            |
+|---------------------------------|---------------------------|
+| `Templates/Card.tpl`            | `App.Templates.Card`      |
+| `Templates/Widgets/Button.tpl`  | `App.Templates.Widgets.Button` |
+
+A `.tpl` file outside a `Templates/` folder is ignored — the generator only
+claims templates under that root.
+
+### Wiring
+
+The generator reads two MSBuild properties through `CompilerVisibleProperty`
+(`RootNamespace` for the namespace root and `ProjectDir` to resolve each
+template's path relative to the project). Reference the generator as an analyzer,
+list the templates as `AdditionalFiles`, and embed the same files so the
+default `Structure` can load them:
+
+```xml
+<ItemGroup>
+  <ProjectReference Include="…/Templar.Generators.csproj"
+                    OutputItemType="Analyzer"
+                    ReferenceOutputAssembly="false" />
+</ItemGroup>
+
+<ItemGroup>
+  <CompilerVisibleProperty Include="RootNamespace" />
+  <CompilerVisibleProperty Include="ProjectDir" />
+</ItemGroup>
+
+<ItemGroup>
+  <AdditionalFiles Include="Templates/**/*.tpl" />
+  <EmbeddedResource Include="Templates/**/*.tpl" />
+</ItemGroup>
+```
+
+### Usage
+
+```csharp
+using App.Templates;
+
+string output = new Card
+{
+    Who   = "World",
+    Place = "Templar",
+}.Render();
+```
+
+The property names are checked by the compiler, so a renamed or missing
+placeholder is a build error rather than a silent empty render.
+
 ## Zero dependencies
 
 The runtime has no external NuGet references. Drop it into a library that

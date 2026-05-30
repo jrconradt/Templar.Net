@@ -71,26 +71,26 @@ public class SecurityTests
     [Fact]
     public void Boolean_attribute_renders_bare()
     {
-        Assert.Equal(" disabled", new Attr { Name = "disabled", Boolean = true }.Render());
+        Assert.Equal(" disabled", new Attr { Name = "disabled", Valueless = true }.Render());
     }
 
     [Fact]
     public void Attrs_slot_rejects_plain_string()
     {
-        Assert.Throws<MarkupSecurityException>(() => H.Div("x", attrs: "id=\"x\"").Render());
+        Assert.Throws<MarkupSecurityException>(() => Markup.Div("x", attrs: "id=\"x\"").Render());
     }
 
     [Fact]
     public void Attrs_slot_accepts_escaped_attr()
     {
-        var html = H.Div("x", attrs: new Attr { Name = "id", Value = "main" }).Render();
+        var html = Markup.Div("x", attrs: new Attr { Name = "id", Value = "main" }).Render();
         Assert.Equal("<div id=\"main\">\n    x\n</div>", html);
     }
 
     [Fact]
     public void Attrs_slot_accepts_multiple_attrs()
     {
-        var html = H.Div("x", attrs: new[]
+        var html = Markup.Div("x", attrs: new[]
         {
             new Attr { Name = "id", Value = "a" },
             new Attr { Name = "data-n", Value = "1" },
@@ -101,13 +101,13 @@ public class SecurityTests
     [Fact]
     public void Url_attribute_through_element_is_sanitized()
     {
-        var html = H.A("link", attrs: new Attr { Name = "href", Value = "javascript:alert(1)" }).Render();
+        var html = Markup.A("link", attrs: new Attr { Name = "href", Value = "javascript:alert(1)" }).Render();
         Assert.Equal("<a href=\"about:invalid#blocked\">link</a>", html);
     }
 
     [Fact]
     public void Raw_html_child_is_a_trusted_passthrough()
     {
-        Assert.Equal("<div>\n    <b>ok</b>\n</div>", H.Div(Html.Raw("<b>ok</b>")).Render());
+        Assert.Equal("<div>\n    <b>ok</b>\n</div>", Markup.Div(Markup.Raw("<b>ok</b>")).Render());
     }
 }

@@ -67,6 +67,62 @@ public class TemplateTests
     }
 
     [Fact]
+    public void Filter_Pascal_DashDelimiter()
+    {
+        var t = Template.Parse("{{ name | pascal }}");
+        t["name"] = "foo-bar-baz";
+        Assert.Equal("FooBarBaz", t.Render());
+    }
+
+    [Fact]
+    public void Filter_Pascal_SpaceDelimiter()
+    {
+        var t = Template.Parse("{{ name | pascal }}");
+        t["name"] = "foo bar baz";
+        Assert.Equal("FooBarBaz", t.Render());
+    }
+
+    [Fact]
+    public void Filter_Pascal_MixedDelimiters()
+    {
+        var t = Template.Parse("{{ name | pascal }}");
+        t["name"] = "foo-bar baz_qux";
+        Assert.Equal("FooBarBazQux", t.Render());
+    }
+
+    [Fact]
+    public void Filter_Pascal_ConsecutiveDelimiters()
+    {
+        var t = Template.Parse("{{ name | pascal }}");
+        t["name"] = "foo -_ bar";
+        Assert.Equal("FooBar", t.Render());
+    }
+
+    [Fact]
+    public void Filter_Camel_DashDelimiter()
+    {
+        var t = Template.Parse("{{ name | camel }}");
+        t["name"] = "foo-bar-baz";
+        Assert.Equal("fooBarBaz", t.Render());
+    }
+
+    [Fact]
+    public void Filter_Camel_SpaceDelimiter()
+    {
+        var t = Template.Parse("{{ name | camel }}");
+        t["name"] = "foo bar baz";
+        Assert.Equal("fooBarBaz", t.Render());
+    }
+
+    [Fact]
+    public void Filter_Camel_MixedDelimiters()
+    {
+        var t = Template.Parse("{{ name | camel }}");
+        t["name"] = "foo-bar baz_qux";
+        Assert.Equal("fooBarBazQux", t.Render());
+    }
+
+    [Fact]
     public void Filter_Custom()
     {
         var t = Template.Parse("{{ val | shout }}");

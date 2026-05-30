@@ -9,31 +9,31 @@ public class ElementTests
     [Fact]
     public void Inline_element_renders_on_one_line()
     {
-        Assert.Equal("<span>hi</span>", H.Span("hi").Render());
+        Assert.Equal("<span>hi</span>", Markup.Span("hi").Render());
     }
 
     [Fact]
-    public void Void_element_self_closes()
+    public void Void_element_renders_without_trailing_slash()
     {
-        Assert.Equal("<br />", H.Br().Render());
+        Assert.Equal("<br>", Markup.Br().Render());
     }
 
     [Fact]
     public void Block_element_indents_children()
     {
-        Assert.Equal("<div>\n    <span>hi</span>\n</div>", H.Div(H.Span("hi")).Render());
+        Assert.Equal("<div>\n    <span>hi</span>\n</div>", Markup.Div(Markup.Span("hi")).Render());
     }
 
     [Fact]
     public void Text_children_are_escaped()
     {
-        Assert.Equal("<div>\n    &lt;script&gt;\n</div>", H.Div("<script>").Render());
+        Assert.Equal("<div>\n    &lt;script&gt;\n</div>", Markup.Div("<script>").Render());
     }
 
     [Fact]
     public void Nested_blocks_preserve_indentation_at_depth()
     {
-        var html = H.Ul(new[] { H.Li("a"), H.Li("b") }).Render();
+        var html = Markup.Ul(new[] { Markup.Li("a"), Markup.Li("b") }).Render();
         Assert.Equal(
             "<ul>\n    <li>\n        a\n    </li>\n    <li>\n        b\n    </li>\n</ul>",
             html);
@@ -42,13 +42,13 @@ public class ElementTests
     [Fact]
     public void No_class_attribute_when_empty()
     {
-        Assert.Equal("<span>x</span>", H.Span("x").Render());
+        Assert.Equal("<span>x</span>", Markup.Span("x").Render());
     }
 
     [Fact]
     public void Classes_argument_sets_class()
     {
-        Assert.Equal("<div class=\"card\">\n    x\n</div>", H.Div("x", "card").Render());
+        Assert.Equal("<div class=\"card\">\n    x\n</div>", Markup.Div("x", "card").Render());
     }
 
     [Fact]
@@ -119,51 +119,51 @@ public class ElementTests
     [Fact]
     public void Attrs_slot_adds_raw_attributes()
     {
-        var html = H.Div("x", attrs: Html.Raw("id=\"main\"")).Render();
+        var html = Markup.Div("x", attrs: Markup.Raw("id=\"main\"")).Render();
         Assert.Equal("<div id=\"main\">\n    x\n</div>", html);
     }
 
     [Fact]
     public void Class_and_attrs_render_together()
     {
-        var html = H.Div("x", "card", Html.Raw("id=\"main\"")).Render();
+        var html = Markup.Div("x", "card", Markup.Raw("id=\"main\"")).Render();
         Assert.Equal("<div class=\"card\" id=\"main\">\n    x\n</div>", html);
     }
 
     [Fact]
     public void Pre_preserves_whitespace_without_reindenting()
     {
-        Assert.Equal("<pre>line1\nline2</pre>", H.Pre("line1\nline2").Render());
+        Assert.Equal("<pre>line1\nline2</pre>", Markup.Pre("line1\nline2").Render());
     }
 
     [Fact]
     public void Pre_nested_keeps_content_at_column_zero()
     {
-        Assert.Equal("<div>\n    <pre>a\nb</pre>\n</div>", H.Div(H.Pre("a\nb")).Render());
+        Assert.Equal("<div>\n    <pre>a\nb</pre>\n</div>", Markup.Div(Markup.Pre("a\nb")).Render());
     }
 
     [Fact]
     public void Pre_content_is_escaped()
     {
-        Assert.Equal("<pre>a &lt; b</pre>", H.Pre("a < b").Render());
+        Assert.Equal("<pre>a &lt; b</pre>", Markup.Pre("a < b").Render());
     }
 
     [Fact]
     public void Inline_fragment_concatenates_mixed_content()
     {
-        var html = H.P(H.Inline("Hello ", H.Strong("world"), "!")).Render();
+        var html = Markup.P(Markup.Inline("Hello ", Markup.Strong("world"), "!")).Render();
         Assert.Equal("<p>\n    Hello <strong>world</strong>!\n</p>", html);
     }
 
     [Fact]
     public void Inline_text_is_escaped()
     {
-        Assert.Equal("&lt;x&gt;", H.Inline("<x>").Render());
+        Assert.Equal("&lt;x&gt;", Markup.Inline("<x>").Render());
     }
 
     [Fact]
     public void Inline_raw_part_passes_through()
     {
-        Assert.Equal("<b>", H.Inline(Html.Raw("<b>")).Render());
+        Assert.Equal("<b>", Markup.Inline(Markup.Raw("<b>")).Render());
     }
 }

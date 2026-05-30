@@ -93,14 +93,19 @@ they will propagate (see [integration.md](integration.md#filters-and-options-pro
 ```csharp
 public sealed class RenderOptions
 {
-    public string IndentString { get; init; } = "    ";   // 4 spaces
+    public string IndentString { get; init; } = "    ";
     public string Newline { get; init; } = "\n";
 }
 ```
 
-Set them per-template with `WithOptions`. CRLF and lone CR in injected values
-are normalized to the configured newline, so output is consistent regardless of
-the input's line endings.
+`IndentString` is the unit of indentation the renderer applies when a multi-line
+value inherits the column of its placeholder: the continuation lines are padded
+with whole `IndentString` units to reach the placeholder's indent depth. The
+default is four spaces; set it to `"\t"` to emit tab-indented output, or to any
+other unit you prefer. Set the options per-template with `WithOptions`.
+
+CRLF and lone CR in injected values are normalized to the configured newline, so
+output is consistent regardless of the input's line endings.
 
 ```csharp
 var t = Template.Parse("a\n{{ x }}\nb")
