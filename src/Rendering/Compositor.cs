@@ -36,14 +36,26 @@ public abstract class Compositor
 
     public virtual string Render()
     {
+        var writer = new TemplarWriter(ResolveOptions());
+        RenderInto(writer);
+        Renderer.Drive(writer);
+        return writer.Result;
+    }
+
+    internal virtual void RenderInto(TemplarWriter writer)
+    {
         Compile(out var source,
                 out var values,
                 out var filters,
                 out var options);
-        return Renderer.Render(source,
-                               values,
-                               filters,
-                               options);
+        writer.Frames.Push(new Renderer.ScanFrame
+        {
+            Source = source,
+            Pos = 0,
+            Values = values,
+            Filters = filters,
+            Options = options,
+        });
     }
 
     protected virtual void Validate()
