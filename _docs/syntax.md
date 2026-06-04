@@ -37,6 +37,16 @@ Only one filter per expression. The filter name is also case-insensitive.
 
 Custom filters can be registered via `Template.AddFilter()` or `TemplateSet.AddFilter()`.
 
+## Raw Output
+
+A leading `&` marks an expression as **raw** — `{{& name }}` emits the value without applying the configured escape function:
+
+```
+{{& trustedMarkup }}
+```
+
+With no escape function set (the default for the core engine), `{{ x }}` and `{{& x }}` are identical. The distinction only matters when `RenderOptions.Escape` is configured — for example the HTML escaping in `Templar.UI`, where `{{ x }}` is escaped and `{{& x }}` is verbatim. The `{{> name }}` marker is the same raw path used as a child-component slot (see [ui.md](ui.md)).
+
 ## Comments
 
 ```

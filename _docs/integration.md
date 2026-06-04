@@ -177,7 +177,8 @@ file you place under a project-relative `Templates/` folder into a strongly
 typed `Compositor` subclass, so you bind template variables through named C#
 properties instead of string keys. It is the file-on-disk analog of the
 class-driven generator pattern above — you write the template text once and the
-generator writes the class.
+generator **compiles** it into the class: a `RenderInto` method built from your
+template, not a `Structure` string parsed at runtime.
 
 ### What it generates
 
@@ -187,7 +188,8 @@ For `Templates/Card.tpl`:
 Hello {{ who }} and {{ place }}
 ```
 
-the generator emits, into the `<RootNamespace>.Templates` namespace:
+the generator emits, into the `<RootNamespace>.Templates` namespace, a class whose
+`RenderInto` is the template compiled to straight-line sink calls:
 
 ```csharp
 #nullable enable
@@ -199,18 +201,42 @@ public sealed class Card : global::Templar.Rendering.Compositor
 {
     public required object? Who { get; init; }
     public required object? Place { get; init; }
+
+    public override void RenderInto(global::Templar.Rendering.TemplarWriter w)
+    {
+        w.Compiled(Steps(w));
+    }
+
+    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable> Steps(global::Templar.Rendering.TemplarWriter w)
+    {
+        w.Literal("Hello ");
+        {
+            var __c = w.Value(Who);
+            if (__c is not null) { yield return __c; }
+        }
+        w.Literal(" and ");
+        {
+            var __c = w.Value(Place);
+            if (__c is not null) { yield return __c; }
+        }
+        yield break;
+    }
 }
 ```
 
-Each distinct `{{ placeholder }}` becomes a `required object?` property named in
-PascalCase; the property auto-binds back to its placeholder by name through the
-`Compositor` binding layer. A template with no placeholders emits the class with
-no properties. The generated class does **not** override `Structure`, so at
-render time it loads its template text from the embedded resource matching its
-`FullName` (see [composition.md](composition.md)) — which is why the same `.tpl`
-must be wired as **both** an `AdditionalFiles` entry (so the generator can scan
-its placeholders at compile time) and an `EmbeddedResource` (so the rendered
-class can find its body at runtime).
+Each distinct placeholder becomes a `required object?` property named in PascalCase,
+referenced directly by the compiled `RenderInto` — so a renamed or missing
+placeholder is a compile error rather than a silent empty render. Conditional
+variables (`{{? flag }}`) become properties too. A template with no placeholders
+emits the class with none. Because the generated class carries no `Structure`
+string and is never parsed at runtime, its `.tpl` — unlike a hand-written
+`Compositor`'s embedded template — does **not** need to be an `EmbeddedResource`;
+listing it as `AdditionalFiles` (so the generator can read it at compile time) is
+enough.
+
+Compiled accessors apply the four built-in filters (`upper`/`lower`/`pascal`/`camel`);
+custom runtime-registered filters are a `Template`/`TemplateSet` feature and are not
+available in a compiled accessor.
 
 ### Folder layout drives the namespace
 
@@ -229,9 +255,8 @@ claims templates under that root.
 
 The generator reads two MSBuild properties through `CompilerVisibleProperty`
 (`RootNamespace` for the namespace root and `ProjectDir` to resolve each
-template's path relative to the project). Reference the generator as an analyzer,
-list the templates as `AdditionalFiles`, and embed the same files so the
-default `Structure` can load them:
+template's path relative to the project). Reference the generator as an analyzer
+and list the templates as `AdditionalFiles`:
 
 ```xml
 <ItemGroup>
@@ -247,7 +272,6 @@ default `Structure` can load them:
 
 <ItemGroup>
   <AdditionalFiles Include="Templates/**/*.tpl" />
-  <EmbeddedResource Include="Templates/**/*.tpl" />
 </ItemGroup>
 ```
 

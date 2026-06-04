@@ -107,7 +107,7 @@ See [_docs/composition.md](_docs/composition.md) for the full pattern, including
 
 ### Sequences
 
-A `Sequence` is a `Compositor` whose `Items` are themselves compositors, rendered and joined by a separator with the placeholder's indentation preserved on every line of every item. Three are built in — `Lines` (newline), `BlankLines` (blank line between items), and `CommaList` (`, `) — and any plain `IEnumerable<Compositor>` value is joined by newline. `CSharpFile` uses one internally: its `UsingsBlock` is a `Lines` over `Using` compositors.
+A `Sequence` composes other values, rendering and joining them by a separator with the placeholder's indentation preserved on every line of every item. Construct one with `new Sequence(items, separator)`, or use a built-in factory — `Sequence.Lines` (newline), `Sequence.BlankLines` (blank line between items), or `Sequence.CommaList` (`, `); any plain `IEnumerable<IComposable>` value is joined by newline. `CSharpFile` uses one internally: its `UsingsBlock` is `Sequence.Lines` over `Using` compositors. `Sequence`, like `Compositor`, implements `IComposable` — the engine's composition primitive — so the two compose interchangeably.
 
 ## Render Options
 

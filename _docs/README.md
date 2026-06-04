@@ -31,19 +31,21 @@ string" to "I want to wire this into a build" is to read them in this order:
 | `CSharpFile` preset                              | [composition.md](composition.md#worked-preset--csharpfile) |
 | `TemplateSet` — directories, embedded resources, filter/options propagation | [integration.md](integration.md) |
 | Bulk render / generator patterns                 | [integration.md](integration.md#patterns)       |
-| `.tpl` accessor generator (`Templates/*.tpl` → typed `Compositor`) | [integration.md](integration.md#the-tpl-accessor-generator) |
+| `.tpl` accessor generator (`Templates/*.tpl` → compiled `Compositor`) | [integration.md](integration.md#the-tpl-accessor-generator) |
 
 ## Source pointers
 
 | Type / file                          | Location                                  |
 |--------------------------------------|-------------------------------------------|
-| `Template`                           | `src/Template.cs`                         |
-| `TemplateSet`                        | `src/TemplateSet.cs`                      |
-| `Compositor`, `[TemplateBind]`, `[TemplateIgnore]` | `src/Compositor.cs`         |
+| `Template`                           | `src/Rendering/Template.cs`               |
+| `TemplateSet`                        | `src/Rendering/TemplateSet.cs`            |
+| `Compositor`, `[TemplateBind]`, `[TemplateIgnore]` | `src/Rendering/Compositor.cs` |
+| `IComposable` (composition primitive) | `src/Rendering/IComposable.cs`           |
+| `TemplarWriter` (the render sink)    | `src/Rendering/TemplarWriter.cs`          |
 | `CSharpFile`                         | `src/Presets/CSharpFile.cs`               |
-| `RenderOptions`                      | `src/RenderOptions.cs`                    |
-| Parser (`Template.Validate`)         | `src/Template.cs`                         |
-| Renderer + filters                   | `src/Rendering/`                          |
-| `Sequence` / `Lines` / `BlankLines` / `CommaList` | `src/Sequence.cs`            |
-| `TemplateAccessorGenerator` (`.tpl` → typed `Compositor`) | `src/Templar.Generators/` |
+| `RenderOptions`                      | `src/Rendering/RenderOptions.cs`          |
+| Parser (`Template.Validate`)         | `src/Rendering/Template.cs`               |
+| Renderer (`Renderer.Drive`) + filters | `src/Rendering/`                         |
+| `Sequence` (+ `Lines` / `BlankLines` / `CommaList` factories) | `src/Rendering/Sequence.cs` |
+| `TemplateAccessorGenerator` (`.tpl` → compiled `Compositor`) | `src/Templar.Generators/` |
 | Test corpus (behavior contract)      | `tests/`                                  |
