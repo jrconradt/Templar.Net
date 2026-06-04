@@ -96,7 +96,7 @@ public class SwallowTests
                 {{ inner }}
             after
             """);
-        t["inner"] = new Lines();
+        t["inner"] = Sequence.Lines([]);
         Assert.Equal("before\nafter", t.Render());
     }
 

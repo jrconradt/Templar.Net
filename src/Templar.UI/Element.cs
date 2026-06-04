@@ -30,7 +30,7 @@ public sealed class Element : UIComponent
     public bool RawContent { get; init; }
 
     [TemplateBind("classes")]
-    public ClassList RenderedClasses => new() { Items = BuildClasses() };
+    public Sequence RenderedClasses => new Sequence(BuildClasses(), " ");
 
     public bool HasClasses => BuildClasses().Count > 0;
 
@@ -80,16 +80,16 @@ public sealed class Element : UIComponent
         {
             return raw.Value;
         }
-        if (children is Compositor c)
+        if (children is IComposable c)
         {
             return c.Render();
         }
         return children.ToString() ?? "";
     }
 
-    private List<Compositor> BuildClasses()
+    private List<IComposable> BuildClasses()
     {
-        var items = new List<Compositor>();
+        var items = new List<IComposable>();
         if (!string.IsNullOrEmpty(DefaultClass))
         {
             items.Add(new Cls { Tokens = DefaultClass });
@@ -98,7 +98,7 @@ public sealed class Element : UIComponent
         return items;
     }
 
-    private static void Append(List<Compositor> items, object? style)
+    private static void Append(List<IComposable> items, object? style)
     {
         if (style is null)
         {
@@ -112,12 +112,12 @@ public sealed class Element : UIComponent
             }
             return;
         }
-        if (style is Compositor fragment)
+        if (style is IComposable fragment)
         {
             items.Add(fragment);
             return;
         }
-        if (style is IEnumerable<Compositor> fragments)
+        if (style is IEnumerable<IComposable> fragments)
         {
             items.AddRange(fragments);
             return;
@@ -144,13 +144,13 @@ public sealed class Element : UIComponent
         {
             return Normalize(raw);
         }
-        if (Attrs is Compositor fragment)
+        if (Attrs is IComposable fragment)
         {
             return fragment;
         }
-        if (Attrs is IEnumerable<Compositor> fragments)
+        if (Attrs is IEnumerable<IComposable> fragments)
         {
-            return new Fragment { Items = fragments };
+            return new Sequence(fragments, "");
         }
         throw new MarkupSecurityException(
             "Element.Attrs must be an Attr, a sequence of Attr, or Markup.Raw(...) for trusted markup. A plain string is rejected to prevent attribute injection.");

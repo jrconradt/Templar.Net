@@ -13,7 +13,7 @@ internal static class Renderer
 
     internal sealed class SequenceFrame
     {
-        public required IEnumerator<Compositor> Items;
+        public required IEnumerator<IComposable> Items;
         public required string Separator;
         public bool First = true;
     }
@@ -216,7 +216,7 @@ internal static class Renderer
                         continue;
                     }
 
-                    if (value is IEnumerable<Compositor> comps)
+                    if (value is IEnumerable<IComposable> comps)
                     {
                         string extra = writer.PushColumnIndent();
                         writer.Frames.Push(scan);

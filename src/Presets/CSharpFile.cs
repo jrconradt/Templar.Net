@@ -14,5 +14,5 @@ public class CSharpFile : Compositor
 
     public virtual string Header { get; init; } = "#nullable enable";
 
-    public Lines UsingsBlock => new() { Items = Usings.Select(u => new Using { Name = u }) };
+    public Sequence UsingsBlock => Sequence.Lines(Usings.Select(u => new Using { Name = u }));
 }
