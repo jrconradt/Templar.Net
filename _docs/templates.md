@@ -27,7 +27,7 @@ That is the entire mental model: `Parse` → assign → `Render`.
 | `template.Set(key, value)`       | `Template` (self) | Fluent setter — same as the indexer, returns `this`.            |
 | `template.AddFilter(name, fn)`   | `Template` (self) | Register or override a filter for this template instance.       |
 | `template.WithOptions(options)`  | `Template` (self) | Set newline + indent. Returns `this`.                           |
-| `template.Render()`              | `string`          | Walk the AST, substitute variables, run filters, emit text.     |
+| `template.Render()`              | `string`          | Walk the template, substitute variables, run filters, emit text.|
 
 All fluent methods return the same `Template`, so a full setup can be one
 expression:
@@ -60,6 +60,8 @@ Values can be any `object?`. The renderer materializes them as follows:
 | `null` / unset            | Empty string.                                                    |
 | `string`                  | The string itself.                                               |
 | `IEnumerable<string>`     | Joined with the configured newline; the join behaves as a multi-line value (each item gets indented to the placeholder column). |
+| `Compositor` / `Sequence` (any `IComposable`) | Rendered **structurally** into the placeholder's column — nested composition with indentation preserved across the boundary. |
+| `IEnumerable<IComposable>` | Each item rendered and joined by the configured newline, indentation preserved. |
 | Anything else             | `value.ToString() ?? ""`.                                        |
 
 ## Filters
@@ -95,10 +97,15 @@ public sealed class RenderOptions
 {
     public string IndentString { get; init; } = "    ";
     public string Newline { get; init; } = "\n";
+    public bool StrictUndefined { get; init; } = false;
+    public Func<string, string>? Escape { get; init; } = null;
 }
 ```
 
-`IndentString` is the unit of indentation the renderer applies when a multi-line
+`StrictUndefined`, when `true`, makes rendering a never-set variable throw
+`TemplateRenderException` instead of emitting empty. `Escape` is an optional
+function applied to interpolated text (off by default; `Templar.UI` sets it for
+HTML escaping — see [ui.md](ui.md)). `IndentString` is the unit of indentation the renderer applies when a multi-line
 value inherits the column of its placeholder: the continuation lines are padded
 with whole `IndentString` units to reach the placeholder's indent depth. The
 default is four spaces; set it to `"\t"` to emit tab-indented output, or to any

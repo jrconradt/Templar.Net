@@ -41,7 +41,15 @@ Two ingredients:
 | `protected virtual string Structure`  | Template text. Override, or place an embedded `.tpl` resource matching the type's `FullName`. |
 | `protected virtual void Populate(Template t)` | Default: auto-bind every readable instance property by name. Override to extend.|
 | `WithOptions(RenderOptions options)`  | Fluent — applies render options for this compositor.                                |
-| `Render()`                            | Resolves `Structure` (cached) and renders.                                          |
+| `Render()`                            | Resolves `Structure` (cached) and renders to a string.                              |
+| `void RenderInto(TemplarWriter)`      | The `IComposable` composition primitive — writes this compositor into a shared sink. `Render()` seeds a sink, calls this, and returns the result. |
+
+`Compositor` implements `IComposable`, the engine's composition primitive: any
+value that knows how to write itself into a `TemplarWriter` can be injected as a
+template variable and is rendered structurally (with indentation preserved). The
+`.tpl` accessor generator emits this method directly — see
+[integration.md](integration.md#the-tpl-accessor-generator) — so a generated
+accessor compiles its template to code instead of carrying a `Structure` string.
 
 ## Auto-binding rules
 
@@ -120,7 +128,7 @@ protected override void Populate(Template template)
 
 ## How caching works
 
-Two `ConcurrentDictionary` caches are keyed by `GetType()`:
+Two `ConditionalWeakTable` caches are keyed by `GetType()`:
 
 | Cache              | Computed once per type from                                       | Used in    |
 |--------------------|-------------------------------------------------------------------|------------|
@@ -157,7 +165,7 @@ namespace {{ namespace }};
 | `Header`        | `{{ header }}`     | `#nullable enable`                                   | `virtual`, override to customize. The library emits no comment banner of its own. |
 | `Pragmas`       | `{{ pragmas }}`    | `""`                                                 | Optional, e.g. `#pragma warning disable CS8618`.|
 | `Usings`        | *(not bound)*      | empty                                                | `IEnumerable<string>` of using **names**, no `;`. Marked `[TemplateIgnore]`. |
-| `UsingsBlock`   | `{{ usingsBlock }}`| `new Lines { Items = Usings.Select(u => new Using { Name = u }) }` — a `Sequence` of `Using` compositors | Rendered by the engine's nested-Compositor pathway, so line endings track `RenderOptions.Newline`. |
+| `UsingsBlock`   | `{{ usingsBlock }}`| `Sequence.Lines(Usings.Select(u => new Using { Name = u }))` — a `Sequence` of `Using` compositors | Rendered by the engine's nested-composition pathway, so line endings track `RenderOptions.Newline`. |
 | `Namespace`     | `{{ namespace }}`  | `""`                                                 | File-scoped namespace, required for valid output.|
 | `Body`          | `{{ body }}`       | `""`                                                 | Everything below the namespace.                |
 

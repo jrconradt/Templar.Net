@@ -10,13 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `Templar.UI` — a server-rendered markup component toolkit on top of the
   Templar engine. `UIComponent` (a `Compositor` that HTML-escapes text by
-  default), `Element` + the `H` element factory (generated from the
+  default), `Element` + the `Markup` element factory (generated from the
   `Elements.elements` data table), and a `Document` page preset. Styling is
   compositional, not imperative: a style is a micro-template that contributes
-  class tokens, and an element's classes are a `ClassList` (a space-joined
-  `Sequence`) — composition is the merge. Elements carry a `DefaultClass` that
+  class tokens, and an element's classes are a space-joined `Sequence` —
+  composition is the merge. Elements carry a `DefaultClass` that
   composes with, rather than replaces, the caller's classes. `Attr` builds
-  escaped, scheme-sanitized attributes; `H.Inline`/`Fragment`/`Text` compose
+  escaped, scheme-sanitized attributes; `Markup.Inline`/`Text` compose
   prose with inline markup; `<pre>`/`<textarea>` use a verbatim layout that
   escapes content without reindenting it. Zero dependencies, trim- and AOT-safe.
   See [_docs/ui.md](_docs/ui.md).
@@ -26,17 +26,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   schemes (including control-char-obfuscated) are neutralized to
   `about:invalid#blocked`, and the `attrs` slot rejects raw strings. Unsafe
   input throws `MarkupSecurityException` (fail closed). The only unescaped paths
-  are the explicit `Html.Raw`, `{{& }}`, and `RawContent` opt-outs.
-- `Templar.UI.Generators` — `ElementFactoryGenerator` (emits the `H` factory
+  are the explicit `Markup.Raw`, `{{& }}`, and `RawContent` opt-outs.
+- `Templar.UI.Generators` — `ElementFactoryGenerator` (emits the `Markup` factory
   from `.elements` tables) and `HtmlComponentGenerator` (turns `.html.tpl` files
   into strongly-typed `UIComponent` subclasses, typing each placeholder as
   `string`, `RawHtml`, or `Compositor?` from its marker).
 - Engine: `RenderOptions.Escape` (an optional `Func<string,string>` applied to
-  interpolated text), the `IRawContent` marker interface (values written raw,
-  never escaped), the `IVerbatimContent` marker interface (values written with
-  literal newlines and no per-line reindentation), and two placeholder markers —
-  `{{& x }}` (raw, unescaped) and `{{> x }}` (slot). All default-off, so existing
-  code-generation output is unchanged.
+  interpolated text), the `IPreformattedContent` marker interface (values written
+  verbatim — literal newlines, no per-line reindentation), the `IIndentedContent`
+  marker interface (multi-line values reindented to the placeholder's column), and
+  two placeholder markers — `{{& x }}` (raw, unescaped) and `{{> x }}` (slot). All
+  default-off, so existing code-generation output is unchanged.
+- `IComposable` — the public composition primitive: `void RenderInto(TemplarWriter)`
+  plus a default `Render()`. `Compositor` and `Sequence` implement it, and the
+  renderer dispatches injected values on the interface rather than on concrete base
+  classes, so any value that can write itself into the sink composes.
+- `TemplarWriter` — the public render sink the engine writes through, exposing
+  `Literal`/`Value`/`Truthy`/`Compiled` for compiled output.
+
+### Changed
+- The renderer is inverted onto the `TemplarWriter` sink: `Renderer.Drive` runs a
+  single iterative frame loop (`ScanFrame`/`SequenceFrame`/`CompiledFrame`) writing
+  into the sink, and `Template.Render` / `Compositor.Render` seed it. Rendered output
+  is unchanged.
+- `Sequence` is now a sealed `IComposable` constructed as
+  `new Sequence(items, separator)`; `Lines`/`BlankLines`/`CommaList` are static
+  factory methods (`Sequence.Lines(...)`), not subclasses, and items are
+  `IEnumerable<IComposable>`. The previous `new Lines { Items = … }`
+  object-initializer form is removed.
+- `TemplateAccessorGenerator` now compiles each `.tpl` into a `Compositor` that
+  overrides `RenderInto` with straight-line code instead of carrying a `Structure`
+  string. Generated accessors no longer require the `.tpl` as an `EmbeddedResource`
+  (only `AdditionalFiles`); conditional variables (`{{? c }}`) now become
+  `required object?` properties; compiled accessors apply the four built-in filters
+  only.
+
+### Removed
+- `Templar.UI`'s `ClassList` and `Fragment` types (thin `Sequence` subclasses); use
+  `new Sequence(tokens, " ")` / `new Sequence(items, "")` or `Markup.Inline`.
 
 ### Fixed
 - `Sequence` items after the first now inherit the placeholder's column when the

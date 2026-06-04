@@ -77,8 +77,9 @@ Use `Markup.Raw("<b>…</b>")` (or a `RawHtml`-typed property) when a value is
 already trusted markup. The opt-out is a *type*, not a string flag, so it cannot
 be triggered by accident.
 
-Child components (`Compositor`/`Sequence`/`IEnumerable<Compositor>`) are
-structural and never escaped — their own rendering already escaped their text.
+Child components (any `IComposable` — a `Compositor`, a `Sequence`, or a
+sequence of them) are structural and never escaped — their own rendering already
+escaped their text.
 
 **Filters** (`{{ x | upper }}`) produce escaped text. To emit raw output from a
 computed value, wrap it in `RawHtml` at the component level rather than piping a
@@ -142,9 +143,9 @@ not hand-written. See [The element DSL](#the-element-dsl) below.
 ## Styling — classes as composed micro-templates
 
 There is no imperative attribute builder. **A style is a micro-template that
-contributes class tokens**, and an element's classes are a `ClassList` — a
-`Sequence` joined by a single space. Composition *is* the merge: the join folds
-fragments into one `class="…"` attribute.
+contributes class tokens**, and an element's classes are a space-joined
+`Sequence` (`new Sequence(tokens, " ")`). Composition *is* the merge: the join
+folds fragments into one `class="…"` attribute.
 
 The `classes` argument adds tokens; an empty class list emits no `class`
 attribute at all.
@@ -185,8 +186,8 @@ new Element
 renders `<button class="btn btn--primary">Save</button>` — `DefaultClass` is the
 element's own style and `Class` is the caller's addition.
 
-The default + extras flow through one `ClassList`, so the space-join merges them
-— no second `class` attribute, no merge pass. The stock `Markup` elements ship
+The default + extras flow through one space-joined `Sequence`, so the join merges
+them — no second `class` attribute, no merge pass. The stock `Markup` elements ship
 with *no* default classes (no style opinion); a styled component set sets them in
 the element table or in bespoke components.
 
