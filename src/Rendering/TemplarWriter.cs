@@ -7,6 +7,7 @@ public sealed class TemplarWriter
     internal RenderOptions Options { get; }
     internal Stack<object> Frames { get; } = new();
 
+    private readonly FilterRegistry _builtinFilters = new();
     private string _output = "";
     private int _lineStart = 0;
     private bool _lineHadExpression = false;
@@ -19,6 +20,82 @@ public sealed class TemplarWriter
     }
 
     internal string Result => _output;
+
+    public void Literal(string text)
+    {
+        string nl = Options.Newline;
+        foreach (char ch in text)
+        {
+            WriteLiteralChar(ch, nl);
+        }
+    }
+
+    public bool Truthy(object? value)
+    {
+        return IsTruthy(value);
+    }
+
+    public IComposable? Value(object? value, string? filter = null, bool raw = false)
+    {
+        MarkExpression();
+        string nl = Options.Newline;
+        var esc = Options.Escape;
+
+        if (filter is not null)
+        {
+            string filtered = _builtinFilters.Apply(filter, value, null);
+            if (!raw && esc is not null)
+            {
+                filtered = esc(filtered);
+            }
+            Append(filtered);
+            return null;
+        }
+        if (value is null)
+        {
+            return null;
+        }
+        if (value is IPreformattedContent preformatted)
+        {
+            WriteVerbatim(preformatted.Value, nl);
+            return null;
+        }
+        if (value is IIndentedContent indented)
+        {
+            WriteValueString(indented.Value, nl);
+            return null;
+        }
+        if (value is string sval)
+        {
+            WriteValueString((!raw && esc is not null) ? esc(sval) : sval, nl);
+            return null;
+        }
+        if (value is IComposable composable)
+        {
+            return composable;
+        }
+        if (value is IEnumerable<IComposable> comps)
+        {
+            return new Sequence(comps, nl);
+        }
+        if (value is IEnumerable<string> strs)
+        {
+            string joined = string.Join(nl, strs);
+            WriteValueString((!raw && esc is not null) ? esc(joined) : joined, nl);
+            return null;
+        }
+        string fallback = value.ToString() ?? "";
+        WriteValueString((!raw && esc is not null) ? esc(fallback) : fallback, nl);
+        return null;
+    }
+
+    public void Compiled(IEnumerator<IComposable> steps)
+    {
+        Frames.Push(new Renderer.CompiledFrame
+        {
+            Steps = steps,
+        });
+    }
 
     public override string ToString()
     {

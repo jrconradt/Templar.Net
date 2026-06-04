@@ -25,7 +25,7 @@ public sealed class TemplateAccessorGenerator : IIncrementalGenerator
             .Select((at, ct) =>
             {
                 var text = at.GetText(ct)?.ToString() ?? string.Empty;
-                return new TemplateInput(at.Path, text, PlaceholderScanner.Scan(text));
+                return new TemplateInput(at.Path, text);
             });
 
         var combined = templates.Combine(rootNs.Combine(projDir));
@@ -50,44 +50,13 @@ public sealed class TemplateAccessorGenerator : IIncrementalGenerator
         var ns = string.Join(".", new[] { rootNs }.Concat(new[] { "Templates" }).Concat(location.FolderSegments));
         var className = Identifier.Sanitize(location.LeafName);
 
-        var structure = $"    protected override string Structure => \"{EscapeLiteral(tpl.Text)}\";\n";
-
-        var properties = string.Join("\n",
-            tpl.Placeholders.Select(p => $"    public required object? {Identifier.UpperFirst(p)} {{ get; init; }}"));
-        var body = properties.Length > 0 ? $"\n{properties}\n" : "\n";
-
-        var source = "#nullable enable\n\n"
-            + $"namespace {ns};\n\n"
-            + "[global::System.CodeDom.Compiler.GeneratedCode(\"Templar.Generators\", \"1.0.0\")]\n"
-            + $"public sealed class {className} : global::Templar.Rendering.Compositor\n"
-            + "{\n"
-            + structure
-            + body
-            + "}\n";
+        var source = TemplateCompiler.EmitClass(ns, className, tpl.Text);
 
         var fileName = "Templates." + string.Join(".", location.FolderSegments.Concat(new[] { className })) + ".g.cs";
         return (fileName, source);
     }
 
-    private static string EscapeLiteral(string s)
-    {
-        return string.Concat(s.Select(EscapeChar));
-    }
-
-    private static string EscapeChar(char c)
-    {
-        return c switch
-        {
-            '\\' => "\\\\",
-            '"' => "\\\"",
-            '\n' => "\\n",
-            '\r' => "\\r",
-            '\t' => "\\t",
-            _ => $"{c}",
-        };
-    }
-
-    private sealed record TemplateInput(string Path, string Text, IReadOnlyList<string> Placeholders);
+    private sealed record TemplateInput(string Path, string Text);
 
     private sealed class TemplateLocation
     {
