@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 namespace Templar.Rendering;
 
 [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.NonPublicProperties)]
-public abstract class Compositor
+public abstract class Compositor : IComposable
 {
     private static readonly ConditionalWeakTable<Type, BindablePropertyInfo[]> _bindCache = new();
     private static readonly ConditionalWeakTable<Type, string> _structureCache = new();
@@ -42,7 +42,7 @@ public abstract class Compositor
         return writer.Result;
     }
 
-    internal virtual void RenderInto(TemplarWriter writer)
+    public virtual void RenderInto(TemplarWriter writer)
     {
         Compile(out var source,
                 out var values,

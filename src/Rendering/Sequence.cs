@@ -7,6 +7,15 @@ public abstract class Sequence : Compositor
 
     internal string SeparatorInternal => Separator;
 
+    public override void RenderInto(TemplarWriter writer)
+    {
+        writer.Frames.Push(new Renderer.SequenceFrame
+        {
+            Items = Items.GetEnumerator(),
+            Separator = Separator,
+        });
+    }
+
     public override string Render()
     {
         string result = "";

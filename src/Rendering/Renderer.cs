@@ -206,26 +206,12 @@ internal static class Renderer
                         continue;
                     }
 
-                    if (value is Sequence seqVal)
+                    if (value is IComposable composable)
                     {
                         string extra = writer.PushColumnIndent();
                         writer.Frames.Push(scan);
                         writer.Frames.Push(new IndentPop(extra));
-                        writer.Frames.Push(new SequenceFrame
-                        {
-                            Items = seqVal.Items.GetEnumerator(),
-                            Separator = seqVal.SeparatorInternal,
-                        });
-                        current = writer.Frames.Pop();
-                        continue;
-                    }
-
-                    if (value is Compositor co)
-                    {
-                        string extra = writer.PushColumnIndent();
-                        writer.Frames.Push(scan);
-                        writer.Frames.Push(new IndentPop(extra));
-                        co.RenderInto(writer);
+                        composable.RenderInto(writer);
                         current = writer.Frames.Pop();
                         continue;
                     }

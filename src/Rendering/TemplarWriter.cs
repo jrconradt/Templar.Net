@@ -2,7 +2,7 @@ using System.Collections;
 
 namespace Templar.Rendering;
 
-internal sealed class TemplarWriter
+public sealed class TemplarWriter
 {
     internal RenderOptions Options { get; }
     internal Stack<object> Frames { get; } = new();
