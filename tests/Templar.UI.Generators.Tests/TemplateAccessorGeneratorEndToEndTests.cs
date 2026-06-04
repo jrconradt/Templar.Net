@@ -132,7 +132,7 @@ public class TemplateAccessorGeneratorEndToEndTests
                                                           "App",
                                                           "/proj/");
 
-        Assert.Contains("protected override string Structure =>", source);
+        Assert.Contains("public override void RenderInto", source);
 
         var type = assembly.GetType("App.Templates.Greeting");
         Assert.NotNull(type);
@@ -143,6 +143,29 @@ public class TemplateAccessorGeneratorEndToEndTests
 
         var rendered = instance.Render();
         Assert.Equal("Hello Ada, welcome to Templar!", rendered);
+    }
+
+    [Fact]
+    public void Generated_accessor_compiles_conditionals_and_filters()
+    {
+        var (source, assembly) = CompileGeneratedAccessor("/proj/Templates/Cond.tpl",
+                                                          "{{? show }}Hi {{ name | upper }}{{?else}}bye{{?}}",
+                                                          "App",
+                                                          "/proj/");
+
+        Assert.Contains("w.Truthy(", source);
+
+        var type = assembly.GetType("App.Templates.Cond")!;
+
+        var shown = (Compositor)Activator.CreateInstance(type)!;
+        type.GetProperty("Show")!.SetValue(shown, true);
+        type.GetProperty("Name")!.SetValue(shown, "ada");
+        Assert.Equal("Hi ADA", shown.Render());
+
+        var hidden = (Compositor)Activator.CreateInstance(type)!;
+        type.GetProperty("Show")!.SetValue(hidden, false);
+        type.GetProperty("Name")!.SetValue(hidden, "ada");
+        Assert.Equal("bye", hidden.Render());
     }
 
     [Fact]

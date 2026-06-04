@@ -18,6 +18,11 @@ internal static class Renderer
         public bool First = true;
     }
 
+    internal sealed class CompiledFrame
+    {
+        public required IEnumerator<IComposable> Steps;
+    }
+
     private sealed record IndentPop(string Extra);
 
     internal static string Render(string source,
@@ -267,6 +272,27 @@ internal static class Renderer
                 var child = seq.Items.Current;
                 writer.Frames.Push(seq);
                 child.RenderInto(writer);
+                current = writer.Frames.Pop();
+                continue;
+            }
+
+            if (current is CompiledFrame compiled)
+            {
+                if (compiled.Steps.MoveNext())
+                {
+                    var step = compiled.Steps.Current;
+                    string extra = writer.PushColumnIndent();
+                    writer.Frames.Push(compiled);
+                    writer.Frames.Push(new IndentPop(extra));
+                    step.RenderInto(writer);
+                    current = writer.Frames.Pop();
+                    continue;
+                }
+                compiled.Steps.Dispose();
+                if (writer.Frames.Count == 0)
+                {
+                    return;
+                }
                 current = writer.Frames.Pop();
                 continue;
             }
