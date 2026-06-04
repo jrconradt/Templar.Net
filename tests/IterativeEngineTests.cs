@@ -36,7 +36,7 @@ public class IterativeEngineTests
         var items = Enumerable.Range(0, 1000)
             .Select(i => (Compositor)new Item { Name = i.ToString() })
             .ToArray();
-        var seq = new Lines { Items = items };
+        var seq = Sequence.Lines(items);
         var output = seq.Render();
         var lines = output.Split('\n');
         Assert.Equal(1000, lines.Length);
@@ -47,17 +47,17 @@ public class IterativeEngineTests
     [Fact]
     public void Sequence_OfSequences_NestsCorrectly()
     {
-        var inner1 = new CommaList { Items = new[]
+        var inner1 = Sequence.CommaList(new[]
         {
             (Compositor)new Item { Name = "a" },
             new Item { Name = "b" },
-        }};
-        var inner2 = new CommaList { Items = new[]
+        });
+        var inner2 = Sequence.CommaList(new[]
         {
             (Compositor)new Item { Name = "c" },
             new Item { Name = "d" },
-        }};
-        var outer = new Lines { Items = new Compositor[] { inner1, inner2 } };
+        });
+        var outer = Sequence.Lines(new IComposable[] { inner1, inner2 });
 
         Assert.Equal("item:a, item:b\nitem:c, item:d", outer.Render());
     }

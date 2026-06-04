@@ -4,12 +4,12 @@ namespace Templar.UI;
 
 public static partial class Markup
 {
-    public static Fragment Inline(params object?[] parts)
+    public static Sequence Inline(params object?[] parts)
     {
-        var items = new List<Compositor>();
+        var items = new List<IComposable>();
         foreach (var part in parts)
         {
-            if (part is Compositor fragment)
+            if (part is IComposable fragment)
             {
                 items.Add(fragment);
             }
@@ -18,7 +18,7 @@ public static partial class Markup
                 items.Add(new Text { Value = part });
             }
         }
-        return new Fragment { Items = items };
+        return new Sequence(items, "");
     }
 
     public static string Escape(string value)

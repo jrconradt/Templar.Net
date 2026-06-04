@@ -209,13 +209,13 @@ public class EngineCoverageTests
     [Fact]
     public void Empty_sequence_renders_empty()
     {
-        Assert.Equal("", new Lines().Render());
+        Assert.Equal("", Sequence.Lines([]).Render());
     }
 
     [Fact]
     public void Comma_list_joins_with_comma_space()
     {
-        var list = new CommaList { Items = new Compositor[] { new Lit { V = "a" }, new Lit { V = "b" } } };
+        var list = Sequence.CommaList(new Compositor[] { new Lit { V = "a" }, new Lit { V = "b" } });
         Assert.Equal("a, b", list.Render());
     }
 
@@ -308,7 +308,7 @@ public class EngineCoverageTests
     [Fact]
     public void Blank_lines_sequence_joins_with_blank_line()
     {
-        var list = new BlankLines { Items = new Compositor[] { new Lit { V = "a" }, new Lit { V = "b" } } };
+        var list = Sequence.BlankLines(new Compositor[] { new Lit { V = "a" }, new Lit { V = "b" } });
         Assert.Equal("a\n\nb", list.Render());
     }
 }

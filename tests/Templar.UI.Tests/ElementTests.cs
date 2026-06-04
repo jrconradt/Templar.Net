@@ -109,10 +109,7 @@ public class ElementTests
     [Fact]
     public void ClassList_space_joins_fragments()
     {
-        var list = new ClassList
-        {
-            Items = new Compositor[] { new Cls { Tokens = "a" }, new Cls { Tokens = "b" } },
-        };
+        var list = new Sequence(new Compositor[] { new Cls { Tokens = "a" }, new Cls { Tokens = "b" } }, " ");
         Assert.Equal("a b", list.Render());
     }
 
