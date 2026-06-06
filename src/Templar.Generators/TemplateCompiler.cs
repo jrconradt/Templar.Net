@@ -29,6 +29,121 @@ internal static class TemplateCompiler
         }
     }
 
+    public readonly struct ValidationError
+    {
+        public int Line { get; }
+        public string Message { get; }
+
+        public ValidationError(int line, string message)
+        {
+            Line = line;
+            Message = message;
+        }
+    }
+
+    public static ValidationError? Validate(string text)
+    {
+        int depth = 0;
+        int lastOpenerLine = 0;
+        int p = 0;
+        int line = 1;
+        while (p < text.Length)
+        {
+            if (text[p] == '\\' && p + 1 < text.Length)
+            {
+                char n = text[p + 1];
+                if (n == '\\')
+                {
+                    p += 2;
+                    continue;
+                }
+                if (n == '{' && p + 2 < text.Length
+                    && text[p + 2] == '{')
+                {
+                    p += 3;
+                    continue;
+                }
+                if (n == '}' && p + 2 < text.Length
+                    && text[p + 2] == '}')
+                {
+                    p += 3;
+                    continue;
+                }
+            }
+
+            if (p + 1 < text.Length && text[p] == '{'
+                && text[p + 1] == '{')
+            {
+                int openLine = line;
+                char marker = (p + 2 < text.Length) ? text[p + 2] : '\0';
+                bool markerConsumed = marker == '#' || marker == '?'
+                    || marker == '&'
+                    || marker == '>';
+                int contentStart = markerConsumed ? p + 3 : p + 2;
+                int close = text.IndexOf("}}", contentStart, StringComparison.Ordinal);
+                if (close < 0)
+                {
+                    return new ValidationError(openLine, $"Unclosed tag starting at line {openLine}");
+                }
+
+                if (marker == '?')
+                {
+                    string body = text.Substring(contentStart, close - contentStart).Trim();
+                    if (body.Length == 0)
+                    {
+                        if (depth == 0)
+                        {
+                            return new ValidationError(openLine, $"Unexpected '{{{{?}}}}' (no matching conditional) at line {openLine}");
+                        }
+                        depth--;
+                    }
+                    else if (body == "else")
+                    {
+                        if (depth == 0)
+                        {
+                            return new ValidationError(openLine, $"Unexpected '{{{{?else}}}}' (no matching conditional) at line {openLine}");
+                        }
+                    }
+                    else
+                    {
+                        bool negated = body.StartsWith("!", StringComparison.Ordinal);
+                        string name = (negated ? body.Substring(1) : body).Trim();
+                        if (name.Length == 0)
+                        {
+                            return new ValidationError(openLine, $"Empty conditional expression at line {openLine}");
+                        }
+                        depth++;
+                        lastOpenerLine = openLine;
+                    }
+                }
+
+                int afterClose = close + 2;
+                for (int i = p; i < afterClose; i++)
+                {
+                    if (text[i] == '\n')
+                    {
+                        line++;
+                    }
+                }
+                p = afterClose;
+                continue;
+            }
+
+            if (text[p] == '\n')
+            {
+                line++;
+            }
+            p++;
+        }
+
+        if (depth != 0)
+        {
+            return new ValidationError(lastOpenerLine, $"Unterminated conditional opened at line {lastOpenerLine} (expected '{{{{?}}}}')");
+        }
+
+        return null;
+    }
+
     public static string EmitClass(string ns, string className, string templateText)
     {
         var nodes = Parse(templateText);

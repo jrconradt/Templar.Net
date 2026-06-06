@@ -15,6 +15,7 @@ string" to "I want to wire this into a build" is to read them in this order:
 | [templates.md](templates.md)     | You're constructing and rendering a single template at a time.                  |
 | [composition.md](composition.md) | You want a class to **be** the template — properties auto-bind to variables.    |
 | [integration.md](integration.md) | You're loading templates from disk or embedded resources, or wiring a generator.|
+| [ui.md](ui.md)                   | You're rendering server-side HTML/XML/SVG markup with auto-escaping (`Templar.UI`).|
 
 ## What lives where
 
@@ -32,6 +33,8 @@ string" to "I want to wire this into a build" is to read them in this order:
 | `TemplateSet` — directories, embedded resources, filter/options propagation | [integration.md](integration.md) |
 | Bulk render / generator patterns                 | [integration.md](integration.md#patterns)       |
 | `.tpl` accessor generator (`Templates/*.tpl` → compiled `Compositor`) | [integration.md](integration.md#the-tpl-accessor-generator) |
+| `Templar.UI` — `UIComponent`, auto-escaping, `Markup` elements, `Document`, `Attr` | [ui.md](ui.md) |
+| `.html.tpl` generator, element DSL (`*.elements`) | [ui.md](ui.md#the-htmltpl-generator), [ui.md](ui.md#the-element-dsl) |
 
 ## Source pointers
 
@@ -48,4 +51,6 @@ string" to "I want to wire this into a build" is to read them in this order:
 | Renderer (`Renderer.Drive`) + filters | `src/Rendering/`                         |
 | `Sequence` (+ `Lines` / `BlankLines` / `CommaList` factories) | `src/Rendering/Sequence.cs` |
 | `TemplateAccessorGenerator` (`.tpl` → compiled `Compositor`) | `src/Templar.Generators/` |
+| `UIComponent`, `Element`, `Markup`, `Attr`, `Document`, `RawHtml` | `src/Templar.UI/`         |
+| `Templar.UI` generators (`ElementFactoryGenerator`, `HtmlComponentGenerator`) | `src/Templar.UI.Generators/` |
 | Test corpus (behavior contract)      | `tests/`                                  |

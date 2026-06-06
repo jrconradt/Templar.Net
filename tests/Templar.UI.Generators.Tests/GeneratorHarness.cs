@@ -84,6 +84,49 @@ internal static class GeneratorHarness
         return run.Sources;
     }
 
+    public readonly record struct DiagnosticRun(IReadOnlyDictionary<string, string> Sources,
+                                                ImmutableArray<Diagnostic> Diagnostics);
+
+    public static DiagnosticRun RunCapturingDiagnostics(IIncrementalGenerator generator,
+                                                        (string Path, string Text)[] files,
+                                                        Dictionary<string, string>? globalOptions = null)
+    {
+        var compilation = CSharpCompilation.Create("Test",
+                                                   references: new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) },
+                                                   options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var texts = files.Select(f => (AdditionalText)new InMemoryText(f.Path, f.Text)).ToImmutableArray();
+        var provider = new Provider(new Options(globalOptions ?? new Dictionary<string, string>()));
+
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(generators: new[] { generator.AsSourceGenerator() },
+                                                              additionalTexts: texts,
+                                                              parseOptions: null,
+                                                              optionsProvider: provider);
+
+        driver = driver.RunGenerators(compilation);
+        var runResult = driver.GetRunResult();
+
+        var failed = runResult.Results
+            .Where(r => r.Exception is not null)
+            .Select(r => $"{r.Generator.GetGeneratorType().Name} threw: {r.Exception}")
+            .ToList();
+        if (failed.Count > 0)
+        {
+            throw new InvalidOperationException(string.Join("\n", failed));
+        }
+
+        var map = new Dictionary<string, string>();
+        foreach (var generatorResult in runResult.Results)
+        {
+            foreach (var source in generatorResult.GeneratedSources)
+            {
+                map[source.HintName] = source.SourceText.ToString();
+            }
+        }
+
+        return new DiagnosticRun(map, runResult.Diagnostics);
+    }
+
     private readonly record struct GenerationRun(IReadOnlyDictionary<string, string> Sources,
                                                  ImmutableArray<SyntaxTree> Trees);
 
