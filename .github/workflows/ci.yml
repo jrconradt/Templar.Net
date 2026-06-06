@@ -23,7 +23,7 @@ jobs:
         run: dotnet test Templar.slnx -c Release --no-build
 
       - name: Pack
-        run: dotnet pack src/Templar.csproj -c Release --no-build -o artifacts
+        run: dotnet pack src/Templar.csproj -c Release -o artifacts
 
       - uses: actions/upload-artifact@v4
         with:
