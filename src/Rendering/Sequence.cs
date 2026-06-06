@@ -26,6 +26,14 @@ public sealed class Sequence : IComposable
         return new Sequence(items, ", ");
     }
 
+    public string Render()
+    {
+        var writer = new TemplarWriter(new RenderOptions());
+        RenderInto(writer);
+        Renderer.Drive(writer);
+        return writer.Result;
+    }
+
     public void RenderInto(TemplarWriter writer)
     {
         writer.Frames.Push(new Renderer.SequenceFrame
@@ -33,21 +41,5 @@ public sealed class Sequence : IComposable
             Items = _items.GetEnumerator(),
             Separator = _separator,
         });
-    }
-
-    public string Render()
-    {
-        string result = "";
-        bool first = true;
-        foreach (var item in _items)
-        {
-            if (!first)
-            {
-                result += _separator;
-            }
-            first = false;
-            result += item.Render();
-        }
-        return result;
     }
 }

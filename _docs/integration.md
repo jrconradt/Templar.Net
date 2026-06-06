@@ -238,6 +238,14 @@ Compiled accessors apply the four built-in filters (`upper`/`lower`/`pascal`/`ca
 custom runtime-registered filters are a `Template`/`TemplateSet` feature and are not
 available in a compiled accessor.
 
+### Malformed templates
+
+A `.tpl` whose conditional tags are unbalanced — a `{{?}}` or `{{?else}}` with no
+open conditional, or an unterminated `{{? … }}` — is reported at compile time as
+`TMPLR002` (severity `Error`, category `Templar`) carrying the template's file path
+and line. No accessor is emitted for that file, so the build fails with a located
+diagnostic instead of crashing the generator or emitting uncompilable C#.
+
 ### Folder layout drives the namespace
 
 The folder path under `Templates/` extends the namespace; the file's leaf name

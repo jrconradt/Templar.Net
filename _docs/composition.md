@@ -140,6 +140,12 @@ the structure resolution and the reflection walk. Emitting many files of the
 same shape costs essentially the cost of the property reads plus the render
 walk.
 
+A third cache lives in `Template`: a process-wide set of source strings that
+have already passed validation, keyed by the source text. A `Structure` whose
+text was validated once is never re-scanned for syntax errors on later renders,
+so repeated renders pay only the property reads and the render walk — not a
+fresh parse-time validation pass.
+
 This is the structural reason to prefer a `Compositor` over a hand-rolled
 `Template.Parse` loop when generating many files of the same shape.
 

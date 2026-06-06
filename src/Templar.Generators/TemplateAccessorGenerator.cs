@@ -12,6 +12,15 @@ namespace Templar.Generators;
 [Generator]
 public sealed class TemplateAccessorGenerator : IIncrementalGenerator
 {
+    public static readonly DiagnosticDescriptor MalformedTemplate = new(
+        id: "TMPLR002",
+        title: "Malformed .tpl template",
+        messageFormat: "{0}",
+        category: "Templar",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The .tpl file has unbalanced or malformed conditional tags and cannot be compiled into a typed accessor.");
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var rootNs = context.AnalyzerConfigOptionsProvider.Select(
@@ -35,18 +44,44 @@ public sealed class TemplateAccessorGenerator : IIncrementalGenerator
             var (tpl, (ns, dir)) = tuple;
             if (string.IsNullOrEmpty(ns) || string.IsNullOrEmpty(dir)) return;
 
-            var emit = EmitFor(tpl, ns!, dir!);
-            if (emit is null) return;
+            try
+            {
+                var location = TemplateLocation.From(tpl.Path, dir!);
+                if (location is null) return;
 
-            spc.AddSource(emit.Value.FileName, SourceText.From(emit.Value.Source, Encoding.UTF8));
+                var error = TemplateCompiler.Validate(tpl.Text);
+                if (error is not null)
+                {
+                    spc.ReportDiagnostic(Diagnostic.Create(MalformedTemplate,
+                                                           LocationFor(tpl.Path, error.Value.Line),
+                                                           error.Value.Message));
+                    return;
+                }
+
+                var emit = EmitFor(tpl, ns!, location);
+                spc.AddSource(emit.FileName, SourceText.From(emit.Source, Encoding.UTF8));
+            }
+            catch (Exception ex)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(MalformedTemplate,
+                                                       LocationFor(tpl.Path, 1),
+                                                       ex.Message));
+            }
         });
     }
 
-    private static (string FileName, string Source)? EmitFor(TemplateInput tpl, string rootNs, string projDir)
+    private static Location LocationFor(string path, int line)
     {
-        var location = TemplateLocation.From(tpl.Path, projDir);
-        if (location is null) return null;
+        var zeroBased = line > 0 ? line - 1 : 0;
+        var span = new LinePositionSpan(new LinePosition(zeroBased, 0),
+                                        new LinePosition(zeroBased, 0));
+        return Location.Create(path,
+                               new TextSpan(0, 0),
+                               span);
+    }
 
+    private static (string FileName, string Source) EmitFor(TemplateInput tpl, string rootNs, TemplateLocation location)
+    {
         var ns = string.Join(".", new[] { rootNs }.Concat(new[] { "Templates" }).Concat(location.FolderSegments));
         var className = Identifier.Sanitize(location.LeafName);
 

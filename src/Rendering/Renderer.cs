@@ -23,6 +23,14 @@ internal static class Renderer
         public required IEnumerator<IComposable> Steps;
     }
 
+    internal sealed class CaptureFrame
+    {
+        public required IComposable Child;
+        public required Func<string, string>? Transform;
+        public required TemplarWriter Target;
+        public TemplarWriter? Sub;
+    }
+
     private sealed record IndentPop(string Extra);
 
     internal static string Render(string source,
@@ -43,24 +51,69 @@ internal static class Renderer
         return writer.Result;
     }
 
-    internal static void Drive(TemplarWriter writer)
+    internal static void Drive(TemplarWriter root)
     {
-        if (writer.Frames.Count == 0)
+        var writers = new Stack<TemplarWriter>();
+        writers.Push(root);
+        TemplarWriter writer = root;
+        object? current = null;
+
+        bool Advance()
+        {
+            while (writer.Frames.Count == 0)
+            {
+                if (writers.Count <= 1)
+                {
+                    return false;
+                }
+                writers.Pop();
+                writer = writers.Peek();
+            }
+            current = writer.Frames.Pop();
+            return true;
+        }
+
+        if (!Advance())
         {
             return;
         }
 
-        object current = writer.Frames.Pop();
         while (true)
         {
-            if (current is IndentPop pop)
+            if (current is CaptureFrame capture)
             {
-                writer.PopIndent(pop.Extra);
-                if (writer.Frames.Count == 0)
+                if (capture.Sub is null)
+                {
+                    var sub = new TemplarWriter(writer.Options);
+                    capture.Sub = sub;
+                    capture.Child.RenderInto(sub);
+                    capture.Target.Frames.Push(capture);
+                    writers.Push(sub);
+                    writer = sub;
+                }
+                else
+                {
+                    string captured = capture.Sub.Result;
+                    if (capture.Transform is not null)
+                    {
+                        captured = capture.Transform(captured);
+                    }
+                    writer.WriteVerbatim(captured, writer.Options.Newline);
+                }
+                if (!Advance())
                 {
                     return;
                 }
-                current = writer.Frames.Pop();
+                continue;
+            }
+
+            if (current is IndentPop pop)
+            {
+                writer.PopIndent(pop.Extra);
+                if (!Advance())
+                {
+                    return;
+                }
                 continue;
             }
 
@@ -68,11 +121,10 @@ internal static class Renderer
             {
                 if (scan.Pos >= scan.Source.Length)
                 {
-                    if (writer.Frames.Count == 0)
+                    if (!Advance())
                     {
                         return;
                     }
-                    current = writer.Frames.Pop();
                     continue;
                 }
 
@@ -195,6 +247,18 @@ internal static class Renderer
                     {
                         continue;
                     }
+                    if (value is CapturedRender captured)
+                    {
+                        writer.Frames.Push(scan);
+                        writer.Frames.Push(new CaptureFrame
+                        {
+                            Child = captured.Child,
+                            Transform = captured.Transform,
+                            Target = writer,
+                        });
+                        current = writer.Frames.Pop();
+                        continue;
+                    }
                     if (value is IPreformattedContent preformattedContent)
                     {
                         writer.WriteVerbatim(preformattedContent.Value, nl);
@@ -257,11 +321,10 @@ internal static class Renderer
                 if (!seq.Items.MoveNext())
                 {
                     seq.Items.Dispose();
-                    if (writer.Frames.Count == 0)
+                    if (!Advance())
                     {
                         return;
                     }
-                    current = writer.Frames.Pop();
                     continue;
                 }
                 if (!seq.First)
@@ -289,19 +352,17 @@ internal static class Renderer
                     continue;
                 }
                 compiled.Steps.Dispose();
-                if (writer.Frames.Count == 0)
+                if (!Advance())
                 {
                     return;
                 }
-                current = writer.Frames.Pop();
                 continue;
             }
 
-            if (writer.Frames.Count == 0)
+            if (!Advance())
             {
                 return;
             }
-            current = writer.Frames.Pop();
         }
     }
 

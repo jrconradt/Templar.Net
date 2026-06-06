@@ -38,9 +38,9 @@ public sealed class Element : UIComponent
     public object? AttrsMarkup => BuildAttrs();
 
     [TemplateBind("body")]
-    public IPreformattedContent? Body => Layout == ElementLayout.Verbatim
-        ? new Verbatim(VerbatimText())
-        : (IPreformattedContent?)null;
+    public object? Body => Layout == ElementLayout.Verbatim
+        ? VerbatimBody()
+        : null;
 
     protected override string Structure => Layout switch
     {
@@ -60,10 +60,18 @@ public sealed class Element : UIComponent
         BuildAttrs();
     }
 
-    private string VerbatimText()
+    private object VerbatimBody()
     {
+        if (Children is IComposable c)
+        {
+            return new CapturedRender
+            {
+                Child = c,
+                Transform = RawContent ? null : Markup.Escape,
+            };
+        }
         string content = ContentToString(Children);
-        return RawContent ? content : Markup.Escape(content);
+        return new Verbatim(RawContent ? content : Markup.Escape(content));
     }
 
     private static string ContentToString(object? children)
@@ -79,10 +87,6 @@ public sealed class Element : UIComponent
         if (children is IIndentedContent raw)
         {
             return raw.Value;
-        }
-        if (children is IComposable c)
-        {
-            return c.Render();
         }
         return children.ToString() ?? "";
     }

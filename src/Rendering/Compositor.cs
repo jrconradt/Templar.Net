@@ -71,7 +71,7 @@ public abstract class Compositor : IComposable
     {
         Validate();
         source = Structure;
-        var template = Template.Parse(source).WithOptions(ResolveOptions());
+        var template = Template.ParseCached(source).WithOptions(ResolveOptions());
         Populate(template);
         values = template.ValuesInternal;
         filters = template.FiltersInternal;
