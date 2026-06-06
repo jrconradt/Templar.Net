@@ -10,7 +10,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
 
-    <PackageId>Templar</PackageId>
+    <PackageId>Templar.Net</PackageId>
     <Title>Templar</Title>
     <Description>Indentation-aware template engine for C# code generation. Multi-line values automatically inherit the column position of the placeholder, so generated code stays correctly formatted at any nesting depth.</Description>
     <PackageTags>codegen;template;source-generator;code-generation;text-template</PackageTags>
