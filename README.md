@@ -1,6 +1,6 @@
 # Templar
 
-An indentation-aware template engine for C# code generation. Templar's key feature: when a multi-line value is injected into a template, continuation lines automatically inherit the column position of the placeholder — generated code stays correctly formatted at any nesting depth.
+Indentation-aware template engine for C# codegen — multi-line values inherit the placeholder's column, trim/AOT-safe, zero dependencies.
 
 ## The Problem
 
