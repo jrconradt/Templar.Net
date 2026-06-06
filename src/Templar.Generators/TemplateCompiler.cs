@@ -43,7 +43,7 @@ internal static class TemplateCompiler
 
     public static ValidationError? Validate(string text)
     {
-        int depth = 0;
+        var elseSeen = new Stack<bool>();
         int lastOpenerLine = 0;
         int p = 0;
         int line = 1;
@@ -91,18 +91,24 @@ internal static class TemplateCompiler
                     string body = text.Substring(contentStart, close - contentStart).Trim();
                     if (body.Length == 0)
                     {
-                        if (depth == 0)
+                        if (elseSeen.Count == 0)
                         {
                             return new ValidationError(openLine, $"Unexpected '{{{{?}}}}' (no matching conditional) at line {openLine}");
                         }
-                        depth--;
+                        elseSeen.Pop();
                     }
                     else if (body == "else")
                     {
-                        if (depth == 0)
+                        if (elseSeen.Count == 0)
                         {
                             return new ValidationError(openLine, $"Unexpected '{{{{?else}}}}' (no matching conditional) at line {openLine}");
                         }
+                        if (elseSeen.Peek())
+                        {
+                            return new ValidationError(openLine, $"Duplicate '{{{{?else}}}}' in one conditional at line {openLine}");
+                        }
+                        elseSeen.Pop();
+                        elseSeen.Push(true);
                     }
                     else
                     {
@@ -112,7 +118,11 @@ internal static class TemplateCompiler
                         {
                             return new ValidationError(openLine, $"Empty conditional expression at line {openLine}");
                         }
-                        depth++;
+                        if (!IsIdentifier(name))
+                        {
+                            return new ValidationError(openLine, $"Conditional expression '{name}' must be a simple identifier at line {openLine}");
+                        }
+                        elseSeen.Push(false);
                         lastOpenerLine = openLine;
                     }
                 }
@@ -136,7 +146,7 @@ internal static class TemplateCompiler
             p++;
         }
 
-        if (depth != 0)
+        if (elseSeen.Count != 0)
         {
             return new ValidationError(lastOpenerLine, $"Unterminated conditional opened at line {lastOpenerLine} (expected '{{{{?}}}}')");
         }
