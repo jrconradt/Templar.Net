@@ -53,4 +53,31 @@ public class UnbalancedTemplateDiagnosticTests
         Assert.DoesNotContain(run.Diagnostics, d => d.Id == "TMPLR002");
         Assert.NotEmpty(run.Sources);
     }
+
+    [Fact]
+    public void Non_identifier_conditional_reports_diagnostic_and_emits_nothing()
+    {
+        var run = Run("/proj/Templates/Dotted.tpl", "{{? user.active }}x{{?}}");
+
+        Assert.Contains(run.Diagnostics, d => d.Id == "TMPLR002");
+        Assert.Empty(run.Sources);
+    }
+
+    [Fact]
+    public void Negated_non_identifier_conditional_reports_diagnostic_and_emits_nothing()
+    {
+        var run = Run("/proj/Templates/NegDotted.tpl", "{{?! user.active }}x{{?}}");
+
+        Assert.Contains(run.Diagnostics, d => d.Id == "TMPLR002");
+        Assert.Empty(run.Sources);
+    }
+
+    [Fact]
+    public void Duplicate_else_reports_diagnostic_and_emits_nothing()
+    {
+        var run = Run("/proj/Templates/DoubleElse.tpl", "{{?a}}x{{?else}}y{{?else}}z{{?}}");
+
+        Assert.Contains(run.Diagnostics, d => d.Id == "TMPLR002");
+        Assert.Empty(run.Sources);
+    }
 }
