@@ -3,7 +3,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <LangVersion>latest</LangVersion>
-    <Version>1.0.0</Version>
+    <Version>0.1.0</Version>
     <Authors>Infalligence Labs LLC &lt;hello@infalligence.com&gt;</Authors>
     <Company>Infalligence Labs LLC</Company>
     <Copyright>Copyright (c) Infalligence Labs LLC</Copyright>
