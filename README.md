@@ -1,5 +1,7 @@
 # Templar
 
+[![CI](https://github.com/jrconradt/Templar.Net/actions/workflows/ci.yml/badge.svg)](https://github.com/jrconradt/Templar.Net/actions/workflows/ci.yml) ![.NET](https://img.shields.io/badge/.NET-10-512BD4) [![License](https://img.shields.io/badge/License-Apache_2.0-blue)](LICENSE)
+
 Indentation-aware template engine for C# codegen — multi-line values inherit the placeholder's column, trim/AOT-safe, zero dependencies.
 
 ## The Problem
@@ -142,6 +144,10 @@ dotnet build Templar.slnx
 dotnet test Templar.slnx
 ```
 
+## Status
+
+Active development; the core rendering API is stable, while the preset and `Templar.UI` surface are still evolving.
+
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache-2.0. Copyright 2026 Infalligence Labs LLC — see [LICENSE](LICENSE).
