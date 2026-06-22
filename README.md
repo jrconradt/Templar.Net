@@ -38,6 +38,12 @@ This works at arbitrary nesting depths and composes — inner templates render i
 
 ## Quick Start
 
+Install from NuGet:
+
+```bash
+dotnet add package Templar.Net
+```
+
 Given a template file `Templates/Calculator.tpl`:
 
 ```
