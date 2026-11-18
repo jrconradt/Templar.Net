@@ -3,8 +3,8 @@
 A `Template` is a single parsed string with a bag of variables and render
 options. This page covers the **single-template workflow**: parse
 once, set variables, render. For loading many templates from disk or embedded
-resources see [integration.md](integration.md); for declarative
-class-as-template authoring see [composition.md](composition.md).
+resources see [integration.md](integration.md); for the type-resolved model —
+a type is its template — see [composition.md](composition.md).
 
 ## The smallest example
 
@@ -109,12 +109,11 @@ catch (TemplateParseException ex)
 
 ## When to reach for a template (vs. a Compositor)
 
-Use `Template` directly when:
-- The template text is one-off or constructed at runtime.
-- You only need a handful of variables.
-- You want the most direct control over options.
+`Template` is the string-keyed layer underneath: the caller picks the text and
+fills each hole by key. Use it for one-off text, or text constructed at
+runtime, with no type behind it.
 
-Reach for a `Compositor` ([composition.md](composition.md)) when:
-- You're rendering the same template shape many times with different data.
-- You want properties on a class to drive the bindings (no string keys).
-- You want the parsing + reflection done once per type instead of per call.
+When what you generate has a shape, model it as types
+([composition.md](composition.md)): each type finds its own template, its
+properties are the holes, and values compose by their own type — the caller
+selects nothing and fills nothing.
