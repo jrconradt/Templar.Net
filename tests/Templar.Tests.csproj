@@ -18,6 +18,7 @@
     <EmbeddedResource Include="Fixtures\Sample.tpl" />
     <EmbeddedResource Include="Fixtures\Solo.tpl" LogicalName="Solo.tpl" />
     <EmbeddedResource Include="Fixtures\notes.txt" />
+    <EmbeddedResource Include="DefaultNaming\**\*.tpl" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Templar.Generators.Tests\**" />
