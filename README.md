@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jrconradt/Templar.Net/actions/workflows/ci.yml/badge.svg)](https://github.com/jrconradt/Templar.Net/actions/workflows/ci.yml) ![.NET](https://img.shields.io/badge/.NET-10-512BD4) [![License](https://img.shields.io/badge/License-Apache_2.0-blue)](LICENSE)
 
-Indentation-aware template engine for C# codegen — multi-line values inherit the placeholder's column, trim/AOT-safe, zero dependencies.
+Type-resolved template composition for C# codegen — a type is its template, values compose by their own type, multi-line values inherit the placeholder's column. Trim/AOT-safe, zero dependencies.
 
 ## The Problem
 
@@ -34,7 +34,7 @@ class Foo             class Foo
                       }
 ```
 
-This works at arbitrary nesting depths and composes — inner templates render into outer templates with indentation preserved across boundaries.
+This works at arbitrary nesting depths and composes — a value rendered into a placeholder keeps that placeholder's column, however deep the nesting.
 
 ## Quick Start
 
@@ -44,88 +44,135 @@ Install from NuGet:
 dotnet add package Templar.Net
 ```
 
-Given a template file `Templates/Calculator.tpl`:
+Model what you generate as types. Each type is a `Compositor` with its template beside it, named for the type; its properties are the template's holes. In project `Shop`:
 
 ```
-public static class {{ name }}
-{
-    {{ body }}
-}
+Orders/
+  Requisite.cs    Requisite.tpl
+  Line.cs
+  Stocked.cs      Stocked.tpl
+  Backordered.cs  Backordered.tpl
 ```
-
-Load it, fill it, render it:
 
 ```csharp
 using Templar.Rendering;
 
-var set = new TemplateSet().AddDirectory("Templates");
-var template = set.Get("Calculator");
+namespace Shop.Orders;
 
-template["name"] = "Calculator";
-template["body"] = "public int Add(int a, int b)\n{\n    return a + b;\n}";
+public sealed class Requisite : Compositor
+{
+    public required string Name { get; init; }
+    public required IReadOnlyList<Line> Lines { get; init; }
+}
 
-Console.WriteLine(template.Render());
+public abstract class Line : Compositor
+{
+    public required string Sku { get; init; }
+}
+
+public sealed class Stocked : Line
+{
+}
+
+public sealed class Backordered : Line
+{
+    public required string Eta { get; init; }
+}
 ```
 
-The multi-line `body` is injected at the `{{ body }}` column, so the rendered method body lines up one indent inside the class — no manual padding.
+`Requisite.tpl`:
+
+```
+requisite {{ name }}
+{
+    {{ lines }}
+}
+```
+
+`Stocked.tpl` is `stocked {{ sku }}`; `Backordered.tpl`:
+
+```
+backordered {{ sku }}
+    eta {{ eta }}
+```
+
+Embed the templates — one line in the `.csproj`:
+
+```xml
+<ItemGroup>
+  <EmbeddedResource Include="**/*.tpl" />
+</ItemGroup>
+```
+
+Build the model, render the root:
+
+```csharp
+var requisite = new Requisite
+{
+    Name  = "R-1",
+    Lines = [new Stocked { Sku = "A-100" }, new Backordered { Sku = "B-200", Eta = "May" }],
+};
+
+Console.WriteLine(requisite.Render());
+```
+
+```
+requisite R-1
+{
+    stocked A-100
+    backordered B-200
+        eta May
+}
+```
+
+The caller selects no template and fills no hole. Each type's template is found by its `FullName` (`Shop.Orders.Stocked` → resource `Shop.Orders.Stocked.tpl`, the SDK's default name for `Orders/Stocked.tpl` when the namespace follows the folder); each property binds to the hole of the same name; each value composes by its own type — `Stocked` and `Backordered` each by their own template at the `{{ lines }}` column. An empty list renders nothing and its line is dropped.
 
 ## Syntax
 
 | Form | Example | Effect |
 |------|---------|--------|
 | Variable | `{{ name }}` | Replaced with value (empty if unset) |
-| Filter | `{{ name \| pascal }}` | Value transformed by filter |
 | Comment | `{{# ignored }}` | Stripped entirely from output |
-| Conditional | `{{? flag }}…{{?}}` | Body rendered when `flag` is truthy |
-| Else branch | `{{? flag }}…{{?else}}…{{?}}` | Second arm rendered when `flag` is falsy |
-| Negation | `{{?!flag }}…{{?}}` | Body rendered when `flag` is falsy |
 | Escape | `\{{` · `\}}` · `\\` | Literal `{{`, `}}`, `\` |
 
-Variable and filter names are case-insensitive. A conditional tests one variable by name — `null`, `""`, `false`, and an empty `IEnumerable` are falsy; everything else is truthy. Conditional tags are inline: keep `{{? }}`…`{{?}}` on the same line as the text they guard. A line containing only value placeholders that all render empty is dropped entirely, trailing newline included.
-
-### Built-in Filters
-
-| Filter | Input | Output |
-|--------|-------|--------|
-| `upper` | `hello world` | `HELLO WORLD` |
-| `lower` | `Hello World` | `hello world` |
-| `pascal` | `hello_world` | `HelloWorld` |
-| `camel` | `hello_world` | `helloWorld` |
-
-Custom filters: `template.AddFilter("myFilter", val => ...)`.
+Variable names are case-insensitive. A line containing only value placeholders that all render empty is dropped entirely, trailing newline included.
 
 ## Composition
 
-The `Compositor` base class lets a class **be** a template: define `Structure` (the template text) and Templar auto-binds every readable instance property to a template variable matching the property name. The built-in `CSharpFile` preset provides a five-section structure for generating `.cs` files: header, pragmas, usings, file-scoped namespace, and body.
+| You have | You write |
+|----------|-----------|
+| A thing to generate | A `Compositor` subclass, with `<TypeName>.tpl` beside it |
+| A hole in its template | A property named for the hole |
+| A variant of a thing | A subtype, with its own `.tpl` |
+| Many of a thing | A list of the base type |
+
+Values compose by their runtime type: a `string` is text; an `IComposable` (`Compositor`, `Sequence`) renders by its own type's template at the hole's column; an `IEnumerable<IComposable>` renders each item by its own type's template, one per line; `null` or an empty list renders nothing. A string value is never rescanned for placeholders.
+
+A `Sequence` joins composed values by another separator — `Sequence.CommaList`, `Sequence.BlankLines`, or `new Sequence(items, separator)`. The `CSharpFile` preset renders a `.cs` file's header, pragmas, usings, file-scoped namespace, and body; its `Body` is a `string`, placed as text.
+
+See [_docs/composition.md](_docs/composition.md) for the model, and [_docs/integration.md](_docs/integration.md) for how a template is found for a type.
+
+## Templates without a type
+
+`Template` and `TemplateSet` are the lower-level, string-keyed API: parse or load a template by name and fill its holes by key.
 
 ```csharp
-using Templar.Presets;
-
-var file = new CSharpFile
-{
-    Namespace = "MyApp.Generated",
-    Usings    = new[] { "System", "System.Linq" },
-    Body      = "public sealed class Foo;"
-};
-
-string output = file.Render();
+var t = new TemplateSet().AddDirectory("Templates").Get("Calculator");
+t["name"] = "Calculator";
+t["body"] = "public int Add(int a, int b)\n{\n    return a + b;\n}";
+Console.WriteLine(t.Render());
 ```
 
-See [_docs/composition.md](_docs/composition.md) for the full pattern, including `[TemplateBind]`, `[TemplateIgnore]`, inheritance, and overriding `Populate`.
-
-### Sequences
-
-A `Sequence` composes other values, rendering and joining them by a separator with the placeholder's indentation preserved on every line of every item. Construct one with `new Sequence(items, separator)`, or use a built-in factory — `Sequence.Lines` (newline), `Sequence.BlankLines` (blank line between items), or `Sequence.CommaList` (`, `); any plain `IEnumerable<IComposable>` value is joined by newline. `CSharpFile` uses one internally: its `UsingsBlock` is `Sequence.Lines` over `Using` compositors. `Sequence`, like `Compositor`, implements `IComposable` — the engine's composition primitive — so the two compose interchangeably.
+See [_docs/templates.md](_docs/templates.md).
 
 ## Render Options
 
-`RenderOptions`, applied via `template.WithOptions(...)` or `TemplateSet.WithOptions(...)`, controls rendering:
+`RenderOptions`, applied via `WithOptions(...)` on a `Compositor`, `Template`, or `TemplateSet`, controls rendering:
 
 | Option | Default | Effect |
 |--------|---------|--------|
 | `IndentString` | four spaces | Unit of indentation for nested substitution |
 | `Newline` | `\n` | Output line ending; injected `\r\n` / `\r` are normalized to it |
-| `StrictUndefined` | `false` | When `true`, rendering a variable that was never set throws `TemplateRenderException` instead of emitting empty |
 
 Templar is trim- and AOT-safe (`IsTrimmable` / `IsAotCompatible`), so it can be embedded in published, trimmed, or NativeAOT code generators.
 
@@ -135,11 +182,10 @@ Long-form docs live in [`_docs/`](_docs/):
 
 | Page | Covers |
 |------|--------|
-| [syntax.md](_docs/syntax.md) | Placeholder, filter, comment, and indentation rules. |
-| [templates.md](_docs/templates.md) | Constructing, filling, and rendering a single template. |
-| [composition.md](_docs/composition.md) | `Compositor`, `Sequence`, attributes, the `CSharpFile` preset. |
-| [integration.md](_docs/integration.md) | `TemplateSet`, embedded resources, filter/options propagation, generators. |
-| [ui.md](_docs/ui.md) | `Templar.UI` — server-rendered HTML/XML/SVG component toolkit with auto-escaping. |
+| [composition.md](_docs/composition.md) | The model: a type is its template, values compose by type, variants, lists, the `CSharpFile` preset. |
+| [integration.md](_docs/integration.md) | How a template is found for a type; the `.tpl` accessor generator and its limits; `TemplateSet`; exceptions. |
+| [syntax.md](_docs/syntax.md) | Placeholder, comment, and indentation rules. |
+| [templates.md](_docs/templates.md) | The string-keyed `Template` API. |
 
 ## Build & Test
 
@@ -152,7 +198,7 @@ dotnet test Templar.slnx
 
 ## Status
 
-Active development; the core rendering API is stable, while the preset and `Templar.UI` surface are still evolving.
+Active development; the core rendering API is stable, while the preset surface is still evolving.
 
 ## License
 

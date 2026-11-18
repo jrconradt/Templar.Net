@@ -6,26 +6,17 @@ internal static class TemplateCompiler
     {
         Lit,
         Val,
-        IfStart,
-        Else,
-        IfEnd,
     }
 
     private readonly struct Node
     {
         public Op Op { get; }
         public string Text { get; }
-        public string? Filter { get; }
-        public bool Raw { get; }
-        public bool Negated { get; }
 
-        public Node(Op op, string text, string? filter, bool raw, bool negated)
+        public Node(Op op, string text)
         {
             Op = op;
             Text = text;
-            Filter = filter;
-            Raw = raw;
-            Negated = negated;
         }
     }
 
@@ -43,8 +34,6 @@ internal static class TemplateCompiler
 
     public static ValidationError? Validate(string text)
     {
-        var elseSeen = new Stack<bool>();
-        int lastOpenerLine = 0;
         int p = 0;
         int line = 1;
         while (p < text.Length)
@@ -76,55 +65,21 @@ internal static class TemplateCompiler
             {
                 int openLine = line;
                 char marker = (p + 2 < text.Length) ? text[p + 2] : '\0';
-                bool markerConsumed = marker == '#' || marker == '?'
-                    || marker == '&'
-                    || marker == '>';
+                if (marker == '?' || marker == '&'
+                    || marker == '>')
+                {
+                    return new ValidationError(openLine, $"Unsupported tag marker '{marker}' at line {openLine}");
+                }
+                bool markerConsumed = marker == '#';
                 int contentStart = markerConsumed ? p + 3 : p + 2;
                 int close = text.IndexOf("}}", contentStart, StringComparison.Ordinal);
                 if (close < 0)
                 {
                     return new ValidationError(openLine, $"Unclosed tag starting at line {openLine}");
                 }
-
-                if (marker == '?')
+                if (!markerConsumed && text.IndexOf('|', contentStart, close - contentStart) >= 0)
                 {
-                    string body = text.Substring(contentStart, close - contentStart).Trim();
-                    if (body.Length == 0)
-                    {
-                        if (elseSeen.Count == 0)
-                        {
-                            return new ValidationError(openLine, $"Unexpected '{{{{?}}}}' (no matching conditional) at line {openLine}");
-                        }
-                        elseSeen.Pop();
-                    }
-                    else if (body == "else")
-                    {
-                        if (elseSeen.Count == 0)
-                        {
-                            return new ValidationError(openLine, $"Unexpected '{{{{?else}}}}' (no matching conditional) at line {openLine}");
-                        }
-                        if (elseSeen.Peek())
-                        {
-                            return new ValidationError(openLine, $"Duplicate '{{{{?else}}}}' in one conditional at line {openLine}");
-                        }
-                        elseSeen.Pop();
-                        elseSeen.Push(true);
-                    }
-                    else
-                    {
-                        bool negated = body.StartsWith("!", StringComparison.Ordinal);
-                        string name = (negated ? body.Substring(1) : body).Trim();
-                        if (name.Length == 0)
-                        {
-                            return new ValidationError(openLine, $"Empty conditional expression at line {openLine}");
-                        }
-                        if (!IsIdentifier(name))
-                        {
-                            return new ValidationError(openLine, $"Conditional expression '{name}' must be a simple identifier at line {openLine}");
-                        }
-                        elseSeen.Push(false);
-                        lastOpenerLine = openLine;
-                    }
+                    return new ValidationError(openLine, $"Unsupported '|' in tag at line {openLine}");
                 }
 
                 int afterClose = close + 2;
@@ -144,11 +99,6 @@ internal static class TemplateCompiler
                 line++;
             }
             p++;
-        }
-
-        if (elseSeen.Count != 0)
-        {
-            return new ValidationError(lastOpenerLine, $"Unterminated conditional opened at line {lastOpenerLine} (expected '{{{{?}}}}')");
         }
 
         return null;
@@ -176,7 +126,7 @@ internal static class TemplateCompiler
             + "    {\n"
             + "        w.Compiled(Steps(w));\n"
             + "    }\n\n"
-            + "    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable> Steps(global::Templar.Rendering.TemplarWriter w)\n"
+            + "    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable?> Steps(global::Templar.Rendering.TemplarWriter w)\n"
             + "    {\n"
             + steps
             + "        yield break;\n"
@@ -193,7 +143,7 @@ internal static class TemplateCompiler
         {
             if (lit.Count > 0)
             {
-                nodes.Add(new Node(Op.Lit, new string(lit.ToArray()), null, false, false));
+                nodes.Add(new Node(Op.Lit, new string(lit.ToArray())));
                 lit.Clear();
             }
         }
@@ -234,9 +184,7 @@ internal static class TemplateCompiler
                 && text[p + 1] == '{')
             {
                 char marker = p + 2 < text.Length ? text[p + 2] : '\0';
-                bool consumed = marker == '#' || marker == '?'
-                    || marker == '&'
-                    || marker == '>';
+                bool consumed = marker == '#';
                 int contentStart = consumed ? p + 3 : p + 2;
                 int close = text.IndexOf("}}", contentStart, StringComparison.Ordinal);
                 if (close < 0)
@@ -254,40 +202,8 @@ internal static class TemplateCompiler
                     continue;
                 }
 
-                if (marker == '?')
-                {
-                    FlushLit();
-                    if (body.Length == 0)
-                    {
-                        nodes.Add(new Node(Op.IfEnd, "", null, false, false));
-                        continue;
-                    }
-                    if (body == "else")
-                    {
-                        nodes.Add(new Node(Op.Else, "", null, false, false));
-                        continue;
-                    }
-                    bool neg = body.StartsWith("!", StringComparison.Ordinal);
-                    string cond = (neg ? body.Substring(1) : body).Trim();
-                    nodes.Add(new Node(Op.IfStart, cond, null, false, neg));
-                    continue;
-                }
-
                 FlushLit();
-                bool raw = marker == '&' || marker == '>';
-                string varName;
-                string? filter = null;
-                int pipe = body.IndexOf('|');
-                if (pipe >= 0)
-                {
-                    varName = body.Substring(0, pipe).Trim();
-                    filter = body.Substring(pipe + 1).Trim();
-                }
-                else
-                {
-                    varName = body;
-                }
-                nodes.Add(new Node(Op.Val, varName, filter, raw, false));
+                nodes.Add(new Node(Op.Val, body));
                 continue;
             }
 
@@ -305,7 +221,7 @@ internal static class TemplateCompiler
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var node in nodes)
         {
-            if (node.Op != Op.Val && node.Op != Op.IfStart)
+            if (node.Op != Op.Val)
             {
                 continue;
             }
@@ -348,61 +264,13 @@ internal static class TemplateCompiler
                         break;
                     }
                     string prop = Identifier.UpperFirst(node.Text);
-                    string call = ValueCall(prop, node.Filter, node.Raw);
-                    lines.Add($"{Pad(depth)}{{");
-                    lines.Add($"{Pad(depth + 1)}var __c = {call};");
-                    lines.Add($"{Pad(depth + 1)}if (__c is not null)");
-                    lines.Add($"{Pad(depth + 1)}{{");
-                    lines.Add($"{Pad(depth + 2)}yield return __c;");
-                    lines.Add($"{Pad(depth + 1)}}}");
-                    lines.Add($"{Pad(depth)}}}");
-                    break;
-                }
-                case Op.IfStart:
-                {
-                    string prop = Identifier.UpperFirst(node.Text);
-                    string cond = node.Negated ? $"!w.Truthy({prop})" : $"w.Truthy({prop})";
-                    lines.Add($"{Pad(depth)}if ({cond})");
-                    lines.Add($"{Pad(depth)}{{");
-                    depth++;
-                    break;
-                }
-                case Op.Else:
-                {
-                    depth--;
-                    lines.Add($"{Pad(depth)}}}");
-                    lines.Add($"{Pad(depth)}else");
-                    lines.Add($"{Pad(depth)}{{");
-                    depth++;
-                    break;
-                }
-                case Op.IfEnd:
-                {
-                    depth--;
-                    lines.Add($"{Pad(depth)}}}");
+                    lines.Add($"{Pad(depth)}yield return w.Value({prop});");
                     break;
                 }
             }
         }
 
         return lines.Count > 0 ? string.Join("\n", lines) + "\n" : "";
-    }
-
-    private static string ValueCall(string prop, string? filter, bool raw)
-    {
-        if (filter is null && !raw)
-        {
-            return $"w.Value({prop})";
-        }
-        if (filter is not null && !raw)
-        {
-            return $"w.Value({prop}, \"{EscapeLiteral(filter)}\")";
-        }
-        if (filter is null)
-        {
-            return $"w.Value({prop}, null, true)";
-        }
-        return $"w.Value({prop}, \"{EscapeLiteral(filter)}\", true)";
     }
 
     private static bool IsIdentifier(string s)

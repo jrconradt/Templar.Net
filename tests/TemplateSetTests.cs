@@ -58,18 +58,6 @@ public class TemplateSetTests
     }
 
     [Fact]
-    public void FiltersPropagateFromSetToTemplate()
-    {
-        var set = new TemplateSet()
-            .Add("t", "{{ x | yell }}")
-            .AddFilter("yell", v => (v?.ToString() ?? "") + "!");
-
-        var t = set.Get("t");
-        t["x"] = "hey";
-        Assert.Equal("hey!", t.Render());
-    }
-
-    [Fact]
     public void OptionsPropagateFromSetToTemplate()
     {
         var set = new TemplateSet()

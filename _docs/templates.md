@@ -1,10 +1,10 @@
 # Templates
 
-A `Template` is a single parsed string with a bag of variables, a filter table,
-and render options. This page covers the **single-template workflow**: parse
+A `Template` is a single parsed string with a bag of variables and render
+options. This page covers the **single-template workflow**: parse
 once, set variables, render. For loading many templates from disk or embedded
-resources see [integration.md](integration.md); for declarative
-class-as-template authoring see [composition.md](composition.md).
+resources see [integration.md](integration.md); for the type-resolved model —
+a type is its template — see [composition.md](composition.md).
 
 ## The smallest example
 
@@ -25,17 +25,16 @@ That is the entire mental model: `Parse` → assign → `Render`.
 | `Template.Parse(string text)`    | `Template`        | Tokenize + parse once. Throws `TemplateParseException` on error.|
 | `template[string key]`           | `object?`         | Get/set a variable. Names are case-insensitive.                 |
 | `template.Set(key, value)`       | `Template` (self) | Fluent setter — same as the indexer, returns `this`.            |
-| `template.AddFilter(name, fn)`   | `Template` (self) | Register or override a filter for this template instance.       |
 | `template.WithOptions(options)`  | `Template` (self) | Set newline + indent. Returns `this`.                           |
-| `template.Render()`              | `string`          | Walk the template, substitute variables, run filters, emit text.|
+| `template.Render()`              | `string`          | Walk the template, substitute variables, emit text.             |
 
 All fluent methods return the same `Template`, so a full setup can be one
 expression:
 
 ```csharp
 var output = Template
-    .Parse("class {{ name | pascal }} {}")
-    .Set("name", "user_profile")
+    .Parse("class {{ name }} {}")
+    .Set("name", "UserProfile")
     .Render();
 // → "class UserProfile {}"
 ```
@@ -64,30 +63,6 @@ Values can be any `object?`. The renderer materializes them as follows:
 | `IEnumerable<IComposable>` | Each item rendered and joined by the configured newline, indentation preserved. |
 | Anything else             | `value.ToString() ?? ""`.                                        |
 
-## Filters
-
-Inside the template, the pipe applies one filter to the value:
-
-```
-{{ name | pascal }}
-```
-
-Only one filter per placeholder. Filter names are case-insensitive. The four
-built-ins (`upper`, `lower`, `pascal`, `camel`) are described in
-[syntax.md](syntax.md#built-in-filters). Register a custom filter with
-`AddFilter`:
-
-```csharp
-var t = Template.Parse("{{ tag | shout }}")
-    .AddFilter("shout", v => (v?.ToString() ?? "").ToUpperInvariant() + "!!!");
-t["tag"] = "ship it";
-t.Render();   // → "SHIP IT!!!"
-```
-
-Filters registered on a `Template` instance only apply to that instance.
-To share filters across many templates, register them on a `TemplateSet` and
-they will propagate (see [integration.md](integration.md#filters-and-options-propagate)).
-
 ## Render options
 
 `RenderOptions` controls newline and indent string:
@@ -97,15 +72,10 @@ public sealed class RenderOptions
 {
     public string IndentString { get; init; } = "    ";
     public string Newline { get; init; } = "\n";
-    public bool StrictUndefined { get; init; } = false;
-    public Func<string, string>? Escape { get; init; } = null;
 }
 ```
 
-`StrictUndefined`, when `true`, makes rendering a never-set variable throw
-`TemplateRenderException` instead of emitting empty. `Escape` is an optional
-function applied to interpolated text (off by default; `Templar.UI` sets it for
-HTML escaping — see [ui.md](ui.md)). `IndentString` is the unit of indentation the renderer applies when a multi-line
+`IndentString` is the unit of indentation the renderer applies when a multi-line
 value inherits the column of its placeholder: the continuation lines are padded
 with whole `IndentString` units to reach the placeholder's indent depth. The
 default is four spaces; set it to `"\t"` to emit tab-indented output, or to any
@@ -123,12 +93,11 @@ t.Render();   // → "a\r\nMID\r\nb"
 
 ## Exceptions
 
-Two exception types, both with diagnostic context:
+One exception type, with diagnostic context:
 
 | Exception                    | Carries                                          | Thrown by                                  |
 |------------------------------|--------------------------------------------------|--------------------------------------------|
 | `TemplateParseException`     | `Line`, `Column`                                 | `Template.Parse` on malformed template text|
-| `TemplateRenderException`    | `FilterName`, `VariableName`, `TemplateName?`    | `Render()` on unknown filter, etc.         |
 
 ```csharp
 try { Template.Parse("oops {{ unclosed"); }
@@ -140,12 +109,11 @@ catch (TemplateParseException ex)
 
 ## When to reach for a template (vs. a Compositor)
 
-Use `Template` directly when:
-- The template text is one-off or constructed at runtime.
-- You only need a handful of variables.
-- You want the most direct control over filter registration and options.
+`Template` is the string-keyed layer underneath: the caller picks the text and
+fills each hole by key. Use it for one-off text, or text constructed at
+runtime, with no type behind it.
 
-Reach for a `Compositor` ([composition.md](composition.md)) when:
-- You're rendering the same template shape many times with different data.
-- You want properties on a class to drive the bindings (no string keys).
-- You want the parsing + reflection done once per type instead of per call.
+When what you generate has a shape, model it as types
+([composition.md](composition.md)): each type finds its own template, its
+properties are the holes, and values compose by their own type — the caller
+selects nothing and fills nothing.

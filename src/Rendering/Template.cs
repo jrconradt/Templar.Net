@@ -8,7 +8,6 @@ public sealed class Template
 
     private readonly string _source;
     private readonly Dictionary<string, object?> _values = new(StringComparer.OrdinalIgnoreCase);
-    private readonly FilterRegistry _filters = new();
     private RenderOptions _options = new();
 
     private Template(string source)
@@ -34,8 +33,6 @@ public sealed class Template
 
     private static void Validate(string text)
     {
-        int depth = 0;
-        (int Line, int Col) lastOpenerPos = (0, 0);
         int p = 0;
         int line = 1, col = 1;
         while (p < text.Length)
@@ -70,9 +67,14 @@ public sealed class Template
             {
                 int openLine = line, openCol = col;
                 char marker = (p + 2 < text.Length) ? text[p + 2] : '\0';
-                bool markerConsumed = marker == '#' || marker == '?'
-                    || marker == '&'
-                    || marker == '>';
+                if (marker == '?' || marker == '&'
+                    || marker == '>')
+                {
+                    throw new TemplateParseException($"Unsupported tag marker '{marker}' at line {openLine}, column {openCol}",
+                                                    openLine,
+                                                    openCol);
+                }
+                bool markerConsumed = marker == '#';
                 int contentStart = markerConsumed ? p + 3 : p + 2;
                 int close = text.IndexOf("}}",
                                          contentStart,
@@ -83,42 +85,11 @@ public sealed class Template
                                                     openLine,
                                                     openCol);
                 }
-
-                if (marker == '?')
+                if (!markerConsumed && text.IndexOf('|', contentStart, close - contentStart) >= 0)
                 {
-                    string body = text[contentStart..close].Trim();
-                    if (body.Length == 0)
-                    {
-                        if (depth == 0)
-                        {
-                            throw new TemplateParseException($"Unexpected '{{{{?}}}}' (no matching conditional) at line {openLine}, column {openCol}",
-                                                            openLine,
-                                                            openCol);
-                        }
-                        depth--;
-                    }
-                    else if (body == "else")
-                    {
-                        if (depth == 0)
-                        {
-                            throw new TemplateParseException($"Unexpected '{{{{?else}}}}' (no matching conditional) at line {openLine}, column {openCol}",
-                                                            openLine,
-                                                            openCol);
-                        }
-                    }
-                    else
-                    {
-                        bool negated = body.StartsWith('!');
-                        string name = (negated ? body[1..] : body).Trim();
-                        if (name.Length == 0)
-                        {
-                            throw new TemplateParseException($"Empty conditional expression at line {openLine}, column {openCol}",
-                                                            openLine,
-                                                            openCol);
-                        }
-                        depth++;
-                        lastOpenerPos = (openLine, openCol);
-                    }
+                    throw new TemplateParseException($"Unsupported '|' in tag at line {openLine}, column {openCol}",
+                                                    openLine,
+                                                    openCol);
                 }
 
                 int afterClose = close + 2;
@@ -149,13 +120,6 @@ public sealed class Template
             }
             p++;
         }
-
-        if (depth != 0)
-        {
-            throw new TemplateParseException($"Unterminated conditional opened at line {lastOpenerPos.Line}, column {lastOpenerPos.Col} (expected '{{{{?}}}}')",
-                                            lastOpenerPos.Line,
-                                            lastOpenerPos.Col);
-        }
     }
 
     public object? this[string key]
@@ -170,12 +134,6 @@ public sealed class Template
         return this;
     }
 
-    public Template AddFilter(string name, Func<object?, string> filter)
-    {
-        _filters.Add(name, filter);
-        return this;
-    }
-
     public Template WithOptions(RenderOptions options)
     {
         _options = options;
@@ -186,11 +144,9 @@ public sealed class Template
     {
         return Renderer.Render(_source,
                                _values,
-                               _filters,
                                _options);
     }
 
     internal IDictionary<string, object?> ValuesInternal => _values;
-    internal FilterRegistry FiltersInternal => _filters;
     internal RenderOptions OptionsInternal => _options;
 }

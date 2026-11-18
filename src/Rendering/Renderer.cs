@@ -7,7 +7,6 @@ internal static class Renderer
         public required string Source;
         public int Pos;
         public required IDictionary<string, object?> Values;
-        public required FilterRegistry Filters;
         public required RenderOptions Options;
     }
 
@@ -20,22 +19,13 @@ internal static class Renderer
 
     internal sealed class CompiledFrame
     {
-        public required IEnumerator<IComposable> Steps;
-    }
-
-    internal sealed class CaptureFrame
-    {
-        public required IComposable Child;
-        public required Func<string, string>? Transform;
-        public required TemplarWriter Target;
-        public TemplarWriter? Sub;
+        public required IEnumerator<IComposable?> Steps;
     }
 
     private sealed record IndentPop(string Extra);
 
     internal static string Render(string source,
                                   IDictionary<string, object?> values,
-                                  FilterRegistry filters,
                                   RenderOptions options)
     {
         var writer = new TemplarWriter(options);
@@ -44,76 +34,30 @@ internal static class Renderer
             Source = source,
             Pos = 0,
             Values = values,
-            Filters = filters,
             Options = options,
         });
         Drive(writer);
         return writer.Result;
     }
 
-    internal static void Drive(TemplarWriter root)
+    internal static void Drive(TemplarWriter writer)
     {
-        var writers = new Stack<TemplarWriter>();
-        writers.Push(root);
-        TemplarWriter writer = root;
-        object? current = null;
-
-        bool Advance()
-        {
-            while (writer.Frames.Count == 0)
-            {
-                if (writers.Count <= 1)
-                {
-                    return false;
-                }
-                writers.Pop();
-                writer = writers.Peek();
-            }
-            current = writer.Frames.Pop();
-            return true;
-        }
-
-        if (!Advance())
+        if (writer.Frames.Count == 0)
         {
             return;
         }
 
+        object current = writer.Frames.Pop();
         while (true)
         {
-            if (current is CaptureFrame capture)
-            {
-                if (capture.Sub is null)
-                {
-                    var sub = new TemplarWriter(writer.Options);
-                    capture.Sub = sub;
-                    capture.Child.RenderInto(sub);
-                    capture.Target.Frames.Push(capture);
-                    writers.Push(sub);
-                    writer = sub;
-                }
-                else
-                {
-                    string captured = capture.Sub.Result;
-                    if (capture.Transform is not null)
-                    {
-                        captured = capture.Transform(captured);
-                    }
-                    writer.WriteVerbatim(captured, writer.Options.Newline);
-                }
-                if (!Advance())
-                {
-                    return;
-                }
-                continue;
-            }
-
             if (current is IndentPop pop)
             {
                 writer.PopIndent(pop.Extra);
-                if (!Advance())
+                if (writer.Frames.Count == 0)
                 {
                     return;
                 }
+                current = writer.Frames.Pop();
                 continue;
             }
 
@@ -121,10 +65,11 @@ internal static class Renderer
             {
                 if (scan.Pos >= scan.Source.Length)
                 {
-                    if (!Advance())
+                    if (writer.Frames.Count == 0)
                     {
                         return;
                     }
+                    current = writer.Frames.Pop();
                     continue;
                 }
 
@@ -164,9 +109,7 @@ internal static class Renderer
                     && s[p + 1] == '{')
                 {
                     char marker = (p + 2 < s.Length) ? s[p + 2] : '\0';
-                    bool markerConsumed = marker == '#' || marker == '?'
-                        || marker == '&'
-                        || marker == '>';
+                    bool markerConsumed = marker == '#';
                     int contentStart = markerConsumed ? p + 3 : p + 2;
                     int closePos = s.IndexOf("}}",
                                              contentStart,
@@ -179,99 +122,17 @@ internal static class Renderer
                         continue;
                     }
 
-                    if (marker == '?')
-                    {
-                        if (body.Length == 0)
-                        {
-                            continue;
-                        }
-                        if (body == "else")
-                        {
-                            scan.Pos = SkipPastEnd(s, scan.Pos);
-                            continue;
-                        }
-                        bool negated = body.StartsWith('!');
-                        string name = (negated ? body[1..] : body).Trim();
-                        scan.Values.TryGetValue(name, out var condV);
-                        bool truthy = TemplarWriter.IsTruthy(condV);
-                        if (negated)
-                        {
-                            truthy = !truthy;
-                        }
-                        if (!truthy)
-                        {
-                            var (jumpPos, _) = SkipPastEndOrElse(s, scan.Pos);
-                            scan.Pos = jumpPos;
-                        }
-                        continue;
-                    }
-
-                    bool rawTag = marker == '&'
-                        || marker == '>';
-                    var esc = scan.Options.Escape;
-                    string varName;
-                    string? filterName = null;
-                    int pipeIdx = body.IndexOf('|');
-                    if (pipeIdx >= 0)
-                    {
-                        varName = body[..pipeIdx].Trim();
-                        filterName = body[(pipeIdx + 1)..].Trim();
-                    }
-                    else
-                    {
-                        varName = body;
-                    }
-
-                    bool present = scan.Values.TryGetValue(varName, out var value);
-                    if (scan.Options.StrictUndefined && !present)
-                    {
-                        throw new TemplateRenderException($"Undefined variable '{varName}' (strict mode)",
-                                                         filterName: null,
-                                                         variableName: varName);
-                    }
+                    scan.Values.TryGetValue(body, out var value);
 
                     writer.MarkExpression();
-
-                    if (filterName is not null)
-                    {
-                        var filtered = scan.Filters.Apply(filterName, value, varName);
-                        if (!rawTag && esc is not null)
-                        {
-                            filtered = esc(filtered);
-                        }
-                        writer.Append(filtered);
-                        continue;
-                    }
 
                     if (value is null)
                     {
                         continue;
                     }
-                    if (value is CapturedRender captured)
-                    {
-                        writer.Frames.Push(scan);
-                        writer.Frames.Push(new CaptureFrame
-                        {
-                            Child = captured.Child,
-                            Transform = captured.Transform,
-                            Target = writer,
-                        });
-                        current = writer.Frames.Pop();
-                        continue;
-                    }
-                    if (value is IPreformattedContent preformattedContent)
-                    {
-                        writer.WriteVerbatim(preformattedContent.Value, nl);
-                        continue;
-                    }
-                    if (value is IIndentedContent indentedContent)
-                    {
-                        writer.WriteValueString(indentedContent.Value, nl);
-                        continue;
-                    }
                     if (value is string sval)
                     {
-                        writer.WriteValueString((!rawTag && esc is not null) ? esc(sval) : sval, nl);
+                        writer.WriteValueString(sval, nl);
                         continue;
                     }
 
@@ -302,12 +163,12 @@ internal static class Renderer
                     if (value is IEnumerable<string> strs)
                     {
                         string joined = string.Join(nl, strs);
-                        writer.WriteValueString((!rawTag && esc is not null) ? esc(joined) : joined, nl);
+                        writer.WriteValueString(joined, nl);
                         continue;
                     }
 
                     string fallback = value.ToString() ?? "";
-                    writer.WriteValueString((!rawTag && esc is not null) ? esc(fallback) : fallback, nl);
+                    writer.WriteValueString(fallback, nl);
                     continue;
                 }
 
@@ -321,10 +182,11 @@ internal static class Renderer
                 if (!seq.Items.MoveNext())
                 {
                     seq.Items.Dispose();
-                    if (!Advance())
+                    if (writer.Frames.Count == 0)
                     {
                         return;
                     }
+                    current = writer.Frames.Pop();
                     continue;
                 }
                 if (!seq.First)
@@ -344,6 +206,10 @@ internal static class Renderer
                 if (compiled.Steps.MoveNext())
                 {
                     var step = compiled.Steps.Current;
+                    if (step is null)
+                    {
+                        continue;
+                    }
                     string extra = writer.PushColumnIndent();
                     writer.Frames.Push(compiled);
                     writer.Frames.Push(new IndentPop(extra));
@@ -352,154 +218,19 @@ internal static class Renderer
                     continue;
                 }
                 compiled.Steps.Dispose();
-                if (!Advance())
+                if (writer.Frames.Count == 0)
                 {
                     return;
                 }
+                current = writer.Frames.Pop();
                 continue;
             }
 
-            if (!Advance())
+            if (writer.Frames.Count == 0)
             {
                 return;
             }
+            current = writer.Frames.Pop();
         }
-    }
-
-    private static int SkipPastEnd(string src, int from)
-    {
-        int depth = 0;
-        int p = from;
-        while (p < src.Length)
-        {
-            if (src[p] == '\\' && p + 1 < src.Length)
-            {
-                char n = src[p + 1];
-                if (n == '\\')
-                {
-                    p += 2;
-                    continue;
-                }
-                if (n == '{' && p + 2 < src.Length
-                    && src[p + 2] == '{')
-                {
-                    p += 3;
-                    continue;
-                }
-                if (n == '}' && p + 2 < src.Length
-                    && src[p + 2] == '}')
-                {
-                    p += 3;
-                    continue;
-                }
-            }
-            if (p + 1 < src.Length && src[p] == '{'
-                && src[p + 1] == '{')
-            {
-                if (p + 2 < src.Length && src[p + 2] == '?')
-                {
-                    int close = src.IndexOf("}}",
-                                            p + 3,
-                                            StringComparison.Ordinal);
-                    string body = src[(p + 3)..close].Trim();
-                    if (body.Length == 0)
-                    {
-                        if (depth == 0)
-                        {
-                            return close + 2;
-                        }
-                        depth--;
-                    }
-                    else if (body != "else")
-                    {
-                        depth++;
-                    }
-                    p = close + 2;
-                    continue;
-                }
-                else
-                {
-                    int close = src.IndexOf("}}",
-                                            p + 2,
-                                            StringComparison.Ordinal);
-                    p = close + 2;
-                    continue;
-                }
-            }
-            p++;
-        }
-        return src.Length;
-    }
-
-    private static (int Pos, bool LandedOnElse) SkipPastEndOrElse(string src, int from)
-    {
-        int depth = 0;
-        int p = from;
-        while (p < src.Length)
-        {
-            if (src[p] == '\\' && p + 1 < src.Length)
-            {
-                char n = src[p + 1];
-                if (n == '\\')
-                {
-                    p += 2;
-                    continue;
-                }
-                if (n == '{' && p + 2 < src.Length
-                    && src[p + 2] == '{')
-                {
-                    p += 3;
-                    continue;
-                }
-                if (n == '}' && p + 2 < src.Length
-                    && src[p + 2] == '}')
-                {
-                    p += 3;
-                    continue;
-                }
-            }
-            if (p + 1 < src.Length && src[p] == '{'
-                && src[p + 1] == '{')
-            {
-                if (p + 2 < src.Length && src[p + 2] == '?')
-                {
-                    int close = src.IndexOf("}}",
-                                            p + 3,
-                                            StringComparison.Ordinal);
-                    string body = src[(p + 3)..close].Trim();
-                    if (body.Length == 0)
-                    {
-                        if (depth == 0)
-                        {
-                            return (close + 2, false);
-                        }
-                        depth--;
-                    }
-                    else if (body == "else")
-                    {
-                        if (depth == 0)
-                        {
-                            return (close + 2, true);
-                        }
-                    }
-                    else
-                    {
-                        depth++;
-                    }
-                    p = close + 2;
-                    continue;
-                }
-                else
-                {
-                    int close = src.IndexOf("}}",
-                                            p + 2,
-                                            StringComparison.Ordinal);
-                    p = close + 2;
-                    continue;
-                }
-            }
-            p++;
-        }
-        return (src.Length, false);
     }
 }

@@ -1,62 +1,171 @@
 # Composition
 
-A `Compositor` is a class that **is** a template. You define the template text
-once as a `Structure` property; the public properties of your subclass
-auto-bind into the template's variables by name. Render hundreds of files of
-the same shape with zero string-keyed boilerplate and zero re-parsing.
+A type is its template. A `Compositor` subclass finds its template by its own
+type's `FullName`, binds each property to the hole of the same name, and
+composes each value by that value's own type. You model what you generate as
+types, build the model, and render the root. The caller never selects a
+template, never fills a hole, never counts, and never assembles code as strings.
 
-For low-level placeholder rules see [syntax.md](syntax.md); for the
-`Template`-based equivalent see [templates.md](templates.md); for filter and
-loading patterns see [integration.md](integration.md).
+For placeholder rules see [syntax.md](syntax.md); for how a type's template is
+found and embedded see [integration.md](integration.md#finding-a-template-for-a-type);
+for the string-keyed `Template` API underneath see [templates.md](templates.md).
+
+## The model
+
+| You have                | You write                                                                  |
+|-------------------------|----------------------------------------------------------------------------|
+| A thing to generate     | A `Compositor` subclass, with `<TypeName>.tpl` beside it                    |
+| A hole in its template  | A property named for the hole                                              |
+| A variant of a thing    | A subtype, with its own `.tpl`                                              |
+| Many of a thing         | A list of the base type — `IReadOnlyList<Line>`                             |
+| Nothing there           | An empty list or `null` — renders nothing; a line left blank is dropped     |
 
 ## The smallest example
 
+In a project whose root namespace is `Shop`, each type sits beside its template
+in `Orders/`:
+
 ```csharp
+// Orders/Requisite.cs
 using Templar.Rendering;
 
-public sealed class Greeting : Compositor
-{
-    public string Verb { get; init; } = "Hello";
-    public string Name { get; init; } = "";
-    protected override string Structure => "{{ verb }}, {{ name }}!";
-}
+namespace Shop.Orders;
 
-new Greeting { Name = "World" }.Render();   // → "Hello, World!"
+public sealed class Requisite : Compositor
+{
+    public required string Name { get; init; }
+    public required IReadOnlyList<Line> Lines { get; init; }
+}
 ```
 
-Two ingredients:
+`Orders/Requisite.tpl`:
 
-1. **`Structure`** (`protected virtual string`) — the template text. Either
-   override the property, or place an embedded `.tpl` resource whose logical
-   name matches the type's `FullName` and let the default implementation load
-   it. The resolved structure string is cached per concrete type.
-2. **Auto-bound properties** — every readable instance property on the subclass
-   is exposed to the template under its own name (case-insensitive). Set them
-   with the object-initializer pattern and call `Render()`.
+```
+requisite {{ name }}
+{
+    {{ lines }}
+}
+```
+
+The variants of `Line` are subtypes, each with its own template:
+
+```csharp
+// Orders/Line.cs
+public abstract class Line : Compositor
+{
+    public required string Sku { get; init; }
+}
+
+// Orders/Stocked.cs — template Orders/Stocked.tpl: "stocked {{ sku }}"
+public sealed class Stocked : Line
+{
+}
+
+// Orders/Backordered.cs — template Orders/Backordered.tpl:
+//   "backordered {{ sku }}\n    eta {{ eta }}"
+public sealed class Backordered : Line
+{
+    public required string Eta { get; init; }
+}
+```
+
+Build the model, render the root:
+
+```csharp
+var requisite = new Requisite
+{
+    Name  = "R-1",
+    Lines = [new Stocked { Sku = "A-100" }, new Backordered { Sku = "B-200", Eta = "May" }],
+};
+
+requisite.Render();
+```
+
+```
+requisite R-1
+{
+    stocked A-100
+    backordered B-200
+        eta May
+}
+```
+
+With `Lines = []` the `{{ lines }}` line renders empty and is dropped, leaving
+`requisite R-1\n{\n}`. Nothing at the call site picks `Stocked.tpl` over
+`Backordered.tpl`, writes `template["lines"]`, or joins strings: the type of
+each value decides.
+
+## How a type finds its template
+
+`Structure` (protected virtual) defaults to the embedded resource named
+`<FullName>.tpl` in the type's own assembly — `Shop.Orders.Stocked.tpl` for
+`Shop.Orders.Stocked` (a nested type's `+` becomes `.`). If the type has none,
+its base type's is tried, and so on up to `Compositor`, so a subtype without a
+template of its own renders by its nearest ancestor's. The resolved text is
+cached per type; nothing found throws `InvalidOperationException`.
+
+The SDK's default resource name for `Orders/Stocked.tpl` in project `Shop` is
+`Shop.Orders.Stocked.tpl`, so a template beside its type is found whenever the
+namespace follows the folder; the `.csproj` needs one line. See
+[integration.md](integration.md#finding-a-template-for-a-type).
+
+## How values compose
+
+Each bound value is placed at its hole and dispatched on its runtime type:
+
+| Value                                    | Composes as                                                                 |
+|------------------------------------------|-----------------------------------------------------------------------------|
+| `null`                                   | Nothing.                                                                    |
+| `string`                                 | Text; continuation lines take the hole's column. Never rescanned — a `{{ x }}` inside a value is output as written. |
+| `IComposable` (`Compositor`, `Sequence`) | Rendered by its own type's template at the hole's column.                   |
+| `IEnumerable<IComposable>`               | Each item by its own type's template, one per line, at the hole's column. Empty renders nothing. |
+| `IEnumerable<string>`                    | Joined by the configured newline, as text.                                  |
+| Anything else                            | `ToString()`, as text.                                                      |
+
+A line whose holes all rendered empty and that holds only whitespace is dropped
+with its newline ([syntax.md](syntax.md)).
+
+## Variants are subtypes
+
+A choice between shapes is a choice of type, made when the model is built — not
+a condition at render time. Type the hole as the base (`Line`,
+`IReadOnlyList<Line>`) and give each subtype its own `.tpl`. A subtype that adds
+data but keeps its parent's shape needs no `.tpl` of its own; it renders by the
+nearest base type's template with its own properties bound.
+
+## Lists of types
+
+A property typed as a list of a base type composes each item by its own type,
+one per line. To join with something other than a newline, expose the list as
+a `Sequence` — `Sequence.CommaList`, `Sequence.BlankLines`, or
+`new Sequence(items, separator)`:
+
+```csharp
+[TemplateIgnore]
+public required IReadOnlyList<Parameter> Parameters { get; init; }
+
+public Sequence Arguments => Sequence.CommaList(Parameters);   // {{ arguments }}
+```
 
 ## Surface
 
-| Member                                | Role                                                                                |
-|---------------------------------------|-------------------------------------------------------------------------------------|
-| `protected virtual string Structure`  | Template text. Override, or place an embedded `.tpl` resource matching the type's `FullName`. |
-| `protected virtual void Populate(Template t)` | Default: auto-bind every readable instance property by name. Override to extend.|
-| `WithOptions(RenderOptions options)`  | Fluent — applies render options for this compositor.                                |
-| `Render()`                            | Resolves `Structure` (cached) and renders to a string.                              |
-| `void RenderInto(TemplarWriter)`      | The `IComposable` composition primitive — writes this compositor into a shared sink. `Render()` seeds a sink, calls this, and returns the result. |
+| Member                                        | Role                                                                                |
+|-----------------------------------------------|-------------------------------------------------------------------------------------|
+| `protected virtual string Structure`          | Template text. Default: the embedded `<FullName>.tpl`, walking base types; cached per type. Override only for [inline text](#inline-structure). |
+| `protected virtual void Populate(Template t)` | Default: bind every readable instance property by name.                             |
+| `WithOptions(RenderOptions options)`          | Fluent — applies render options for this compositor.                                |
+| `Render()`                                    | Renders this value and everything composed into it, to a string.                   |
+| `void RenderInto(TemplarWriter)`              | The `IComposable` composition primitive — writes this compositor into a shared sink. `Render()` seeds a sink, calls this, and returns the result. |
 
 `Compositor` implements `IComposable`, the engine's composition primitive: any
-value that knows how to write itself into a `TemplarWriter` can be injected as a
-template variable and is rendered structurally (with indentation preserved). The
-`.tpl` accessor generator emits this method directly — see
-[integration.md](integration.md#the-tpl-accessor-generator) — so a generated
-accessor compiles its template to code instead of carrying a `Structure` string.
+value that writes itself into a `TemplarWriter` composes at a hole with
+indentation preserved.
 
 ## Auto-binding rules
 
-When `Populate` runs (which it does on every `Render`), the default
-implementation iterates the subclass's bindable properties and writes each one
-into the template under its name. The scan happens **once per concrete type**;
-the resulting `PropertyInfo[]` is cached on the type.
+When `Populate` runs (on every `Render`), the default implementation writes
+each bindable property into the template under its name. The scan happens
+**once per concrete type**; the resulting `PropertyInfo[]` is cached on the type.
 
 A property is **bindable** when all of these hold:
 
@@ -71,28 +180,28 @@ overrides it. All lookup is case-insensitive (`Name` → `{{ name }}`).
 
 ### Renaming a binding
 
-Use `[TemplateBind]` when the property name and the variable name should
-differ — e.g. when the template uses a noun that conflicts with a C# keyword
-or stylistic convention.
+Use `[TemplateBind]` when the property name and the hole name must differ —
+e.g. when the template uses a noun that conflicts with a C# keyword or
+stylistic convention.
 
 ```csharp
+// Letter.tpl: "{{ greeting }} {{ recipient }},"
 public sealed class Letter : Compositor
 {
     [TemplateBind("greeting")]
     public string Salutation { get; init; } = "Dear";
 
     public string Recipient { get; init; } = "";
-
-    protected override string Structure => "{{ greeting }} {{ recipient }},";
 }
 ```
 
 ### Skipping a property
 
-Use `[TemplateIgnore]` for computed helpers, internal state, or properties
-whose value type should not appear in rendered output.
+Use `[TemplateIgnore]` for computed helpers and inputs folded into other
+bindings.
 
 ```csharp
+// Sum.tpl: "{{ display }}"
 public sealed class Sum : Compositor
 {
     public IEnumerable<int> Inputs { get; init; } = Array.Empty<int>();
@@ -101,22 +210,19 @@ public sealed class Sum : Compositor
     public int Total => Inputs.Sum();                   // helper, not bound
 
     public string Display => $"sum = {Total}";          // bound as {{ display }}
-
-    protected override string Structure => "{{ display }}";
 }
 ```
 
 ### Inheritance
 
-Inherited properties are picked up (`BindingFlags.FlattenHierarchy`). A
-subclass can reuse a base `Structure` and add new properties to bind, or
-override `Structure` to swap the template entirely.
+Inherited properties bind too (`BindingFlags.FlattenHierarchy`). A subtype with
+its own `.tpl` renders by it; one without renders by its nearest base type's.
 
 ### Extending Populate
 
-Override `Populate` to add bindings the default scan can't produce — anything
-keyed by string, or computed from external state. Call `base.Populate(template)`
-first to keep the auto-bind layer.
+`Populate` is an escape hatch for a value that cannot be a property. It is
+string-keyed; prefer a property. Call `base.Populate(template)` first to keep
+the auto-bind layer.
 
 ```csharp
 protected override void Populate(Template template)
@@ -126,33 +232,43 @@ protected override void Populate(Template template)
 }
 ```
 
+## Inline structure
+
+Overriding `Structure` puts the template text in code instead of a `.tpl`
+beside the type, bypassing the resource lookup. It suits one-line templates and
+tests.
+
+```csharp
+public sealed class Greeting : Compositor
+{
+    public string Name { get; init; } = "";
+    protected override string Structure => "Hello, {{ name }}!";
+}
+
+new Greeting { Name = "World" }.Render();   // → "Hello, World!"
+```
+
 ## How caching works
 
 Two `ConditionalWeakTable` caches are keyed by `GetType()`:
 
 | Cache              | Computed once per type from                                       | Used in    |
 |--------------------|-------------------------------------------------------------------|------------|
-| `_structureCache`  | Resolve `Structure` — e.g. embedded `.tpl` resource lookup        | `Render`   |
+| `_structureCache`  | Resolve `Structure` — the embedded `.tpl` resource lookup         | `Render`   |
 | `_bindCache`       | Reflect bindable instance properties                              | `Populate` |
 
-So the second and later instances of a given `Compositor` subclass skip both
-the structure resolution and the reflection walk. Emitting many files of the
-same shape costs essentially the cost of the property reads plus the render
-walk.
+So the second and later instances of a type skip both the template lookup and
+the reflection walk.
 
 A third cache lives in `Template`: a process-wide set of source strings that
-have already passed validation, keyed by the source text. A `Structure` whose
-text was validated once is never re-scanned for syntax errors on later renders,
-so repeated renders pay only the property reads and the render walk — not a
-fresh parse-time validation pass.
-
-This is the structural reason to prefer a `Compositor` over a hand-rolled
-`Template.Parse` loop when generating many files of the same shape.
+have already passed validation, keyed by the source text. A template validated
+once is never re-scanned for syntax errors, so repeated renders pay only the
+property reads and the render walk.
 
 ## Worked preset — `CSharpFile`
 
 `Templar.Presets.CSharpFile` is a `Compositor` for `.cs` files with a
-**five-section** structure:
+**five-section** template, `CSharpFile.tpl` beside it:
 
 ```
 {{ header }}
@@ -171,9 +287,9 @@ namespace {{ namespace }};
 | `Header`        | `{{ header }}`     | `#nullable enable`                                   | `virtual`, override to customize. The library emits no comment banner of its own. |
 | `Pragmas`       | `{{ pragmas }}`    | `""`                                                 | Optional, e.g. `#pragma warning disable CS8618`.|
 | `Usings`        | *(not bound)*      | empty                                                | `IEnumerable<string>` of using **names**, no `;`. Marked `[TemplateIgnore]`. |
-| `UsingsBlock`   | `{{ usingsBlock }}`| `Sequence.Lines(Usings.Select(u => new Using { Name = u }))` — a `Sequence` of `Using` compositors | Rendered by the engine's nested-composition pathway, so line endings track `RenderOptions.Newline`. |
+| `UsingsBlock`   | `{{ usingsBlock }}`| `Sequence.Lines(Usings.Select(u => new Using { Name = u }))` — a `Sequence` of `Using` compositors | Each name composes as a `Using`, by `Using.tpl`. |
 | `Namespace`     | `{{ namespace }}`  | `""`                                                 | File-scoped namespace, required for valid output.|
-| `Body`          | `{{ body }}`       | `""`                                                 | Everything below the namespace.                |
+| `Body`          | `{{ body }}`       | `""`                                                 | A `string`: placed as text, not composed by type. |
 
 ### Usage
 
@@ -190,31 +306,39 @@ var file = new CSharpFile
 string source = file.Render();
 ```
 
-Subclass it to add your own bindings — they auto-bind alongside the inherited
-ones:
+`Body` is text, so a placeholder inside it is not substituted. To compose a
+model type as the body, give the file its own type and template: a subclass
+with its own `.tpl` renders by it (the inheritance walk finds it first) and
+keeps the inherited `Header`, `Pragmas`, `UsingsBlock`, and `Namespace`
+bindings.
 
 ```csharp
 public sealed class RecordFile : CSharpFile
 {
-    public string TypeName { get; init; } = "";
-
-    public override string Body { get; init; } =
-        "public sealed record {{ typeName }};";
+    public required Record Record { get; init; }
 }
-
-new RecordFile { Namespace = "Acme", TypeName = "User" }.Render();
 ```
 
-The body template substitutes through the same auto-bind layer because
-`TypeName` is bindable on the subclass.
+`RecordFile.tpl`, beside `RecordFile.cs`:
+
+```
+{{ header }}
+{{ pragmas }}
+{{ usingsBlock }}
+
+namespace {{ namespace }};
+
+{{ record }}
+```
 
 ## Pattern checklist
 
-A well-shaped `Compositor`:
+A type-resolved model:
 
-- Declares one `Structure` (raw or interpolated literal — your call).
-- Holds each substituted value as a `{ get; init; }` property.
-- Uses `[TemplateBind]` only when the C# name and the template name must differ.
-- Uses `[TemplateIgnore]` for helpers/inputs that are folded into other bindings.
-- Stays free of side effects in property getters — `Populate` reads them once per render.
-- Renders by `new MyComposite { … }.Render()`. No string keys at the call site.
+- One `Compositor` subclass per thing generated, its `<TypeName>.tpl` beside it.
+- One `{ get; init; }` property per hole — `required` where the hole must be filled.
+- Variants as subtypes, each with its own `.tpl`; holes typed as the base type.
+- Collections as lists of the base type.
+- No `Structure` override, no `Populate` override, no string keys, no `if`/`switch` choosing a template.
+- Property getters free of side effects — `Populate` reads them once per render.
+- Render the root: `model.Render()`.

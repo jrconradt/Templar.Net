@@ -19,7 +19,7 @@ public sealed class TemplateAccessorGenerator : IIncrementalGenerator
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The .tpl file has unbalanced or malformed conditional tags and cannot be compiled into a typed accessor.");
+        description: "The .tpl file has an unclosed tag or an unsupported tag marker and cannot be compiled into a typed accessor.");
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {

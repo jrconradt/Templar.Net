@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace Templar.UI.Generators.Tests;
+namespace Templar.Generators.Tests;
 
 public class TemplateAccessorGeneratorTests
 {
@@ -49,5 +49,14 @@ public class TemplateAccessorGeneratorTests
         var src = Run("/proj/Templates/Bare.tpl", "no placeholders here");
         Assert.Contains("public sealed class Bare : global::Templar.Rendering.Compositor", src);
         Assert.DoesNotContain("{ get; init; }", src);
+    }
+
+    [Fact]
+    public void Emitted_accessor_holds_no_if()
+    {
+        var src = Run("/proj/Templates/Card.tpl", "Hello {{ who }} and {{ place }}");
+        Assert.Contains("yield return w.Value(Who);", src);
+        Assert.Contains("yield return w.Value(Place);", src);
+        Assert.DoesNotContain("if", src);
     }
 }

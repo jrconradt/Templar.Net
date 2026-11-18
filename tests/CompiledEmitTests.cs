@@ -15,24 +15,12 @@ public class CompiledEmitTests
             w.Compiled(Steps(w));
         }
 
-        private IEnumerator<IComposable> Steps(TemplarWriter w)
+        private IEnumerator<IComposable?> Steps(TemplarWriter w)
         {
             w.Literal("Hello ");
-            {
-                var c = w.Value(Who);
-                if (c is not null)
-                {
-                    yield return c;
-                }
-            }
+            yield return w.Value(Who);
             w.Literal(" and ");
-            {
-                var c = w.Value(Place);
-                if (c is not null)
-                {
-                    yield return c;
-                }
-            }
+            yield return w.Value(Place);
             w.Literal("!");
         }
     }
@@ -51,16 +39,10 @@ public class CompiledEmitTests
             w.Compiled(Steps(w));
         }
 
-        private IEnumerator<IComposable> Steps(TemplarWriter w)
+        private IEnumerator<IComposable?> Steps(TemplarWriter w)
         {
             w.Literal("before\n    ");
-            {
-                var c = w.Value(Inside);
-                if (c is not null)
-                {
-                    yield return c;
-                }
-            }
+            yield return w.Value(Inside);
             w.Literal("\nafter");
         }
     }
@@ -100,15 +82,9 @@ public class CompiledEmitTests
             w.Compiled(Steps(w));
         }
 
-        private IEnumerator<IComposable> Steps(TemplarWriter w)
+        private IEnumerator<IComposable?> Steps(TemplarWriter w)
         {
-            {
-                var c = w.Value(Inside);
-                if (c is not null)
-                {
-                    yield return c;
-                }
-            }
+            yield return w.Value(Inside);
         }
     }
 
