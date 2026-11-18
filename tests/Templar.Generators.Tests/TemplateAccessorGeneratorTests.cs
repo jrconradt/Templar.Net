@@ -50,4 +50,13 @@ public class TemplateAccessorGeneratorTests
         Assert.Contains("public sealed class Bare : global::Templar.Rendering.Compositor", src);
         Assert.DoesNotContain("{ get; init; }", src);
     }
+
+    [Fact]
+    public void Emitted_accessor_holds_no_if()
+    {
+        var src = Run("/proj/Templates/Card.tpl", "Hello {{ who }} and {{ place }}");
+        Assert.Contains("yield return w.Value(Who);", src);
+        Assert.Contains("yield return w.Value(Place);", src);
+        Assert.DoesNotContain("if", src);
+    }
 }

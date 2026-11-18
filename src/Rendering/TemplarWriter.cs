@@ -60,7 +60,7 @@ public sealed class TemplarWriter
         return null;
     }
 
-    public void Compiled(IEnumerator<IComposable> steps)
+    public void Compiled(IEnumerator<IComposable?> steps)
     {
         Frames.Push(new Renderer.CompiledFrame
         {

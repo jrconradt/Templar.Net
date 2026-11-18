@@ -19,7 +19,7 @@ internal static class Renderer
 
     internal sealed class CompiledFrame
     {
-        public required IEnumerator<IComposable> Steps;
+        public required IEnumerator<IComposable?> Steps;
     }
 
     private sealed record IndentPop(string Extra);
@@ -206,6 +206,10 @@ internal static class Renderer
                 if (compiled.Steps.MoveNext())
                 {
                     var step = compiled.Steps.Current;
+                    if (step is null)
+                    {
+                        continue;
+                    }
                     string extra = writer.PushColumnIndent();
                     writer.Frames.Push(compiled);
                     writer.Frames.Push(new IndentPop(extra));

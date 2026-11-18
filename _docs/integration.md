@@ -88,24 +88,12 @@ public sealed class Card : global::Templar.Rendering.Compositor
         w.Compiled(Steps(w));
     }
 
-    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable> Steps(global::Templar.Rendering.TemplarWriter w)
+    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable?> Steps(global::Templar.Rendering.TemplarWriter w)
     {
         w.Literal("Hello ");
-        {
-            var __c = w.Value(Who);
-            if (__c is not null)
-            {
-                yield return __c;
-            }
-        }
+        yield return w.Value(Who);
         w.Literal(" and ");
-        {
-            var __c = w.Value(Place);
-            if (__c is not null)
-            {
-                yield return __c;
-            }
-        }
+        yield return w.Value(Place);
         yield break;
     }
 }
@@ -122,7 +110,6 @@ PascalCase. A template with no placeholders emits the class with none. The
 | Types every hole `required object?`           | The hole says nothing about what composes there. The caller constructs the class and fills every hole by hand. |
 | Is `sealed`                                   | No subtypes, so no variants: choosing between accessors is a choice the caller makes in code. |
 | Lives at `<RootNamespace>.Templates.<folders>.<Name>` | The full name a model type would have beside the same file under default resource naming. A model type at `Templates/Card.cs` with `Templates/Card.tpl` listed as `AdditionalFiles` is defined twice (`CS0101`). Keep model types and their templates out of `Templates/`. |
-| Tests each hole's value at render time        | Every compiled hole carries `if (__c is not null)` to decide whether to descend into the value. |
 
 Use it for a free-standing text with a few holes and no model behind it.
 

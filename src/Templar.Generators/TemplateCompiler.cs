@@ -126,7 +126,7 @@ internal static class TemplateCompiler
             + "    {\n"
             + "        w.Compiled(Steps(w));\n"
             + "    }\n\n"
-            + "    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable> Steps(global::Templar.Rendering.TemplarWriter w)\n"
+            + "    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable?> Steps(global::Templar.Rendering.TemplarWriter w)\n"
             + "    {\n"
             + steps
             + "        yield break;\n"
@@ -264,13 +264,7 @@ internal static class TemplateCompiler
                         break;
                     }
                     string prop = Identifier.UpperFirst(node.Text);
-                    lines.Add($"{Pad(depth)}{{");
-                    lines.Add($"{Pad(depth + 1)}var __c = w.Value({prop});");
-                    lines.Add($"{Pad(depth + 1)}if (__c is not null)");
-                    lines.Add($"{Pad(depth + 1)}{{");
-                    lines.Add($"{Pad(depth + 2)}yield return __c;");
-                    lines.Add($"{Pad(depth + 1)}}}");
-                    lines.Add($"{Pad(depth)}}}");
+                    lines.Add($"{Pad(depth)}yield return w.Value({prop});");
                     break;
                 }
             }

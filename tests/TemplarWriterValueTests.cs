@@ -19,16 +19,10 @@ public class TemplarWriterValueTests
             w.Compiled(Steps(w));
         }
 
-        private IEnumerator<IComposable> Steps(TemplarWriter w)
+        private IEnumerator<IComposable?> Steps(TemplarWriter w)
         {
             w.Literal("[");
-            {
-                var c = w.Value(Child);
-                if (c is not null)
-                {
-                    yield return c;
-                }
-            }
+            yield return w.Value(Child);
             w.Literal("]");
         }
     }
