@@ -11,30 +11,26 @@ string" to "I want to wire this into a build" is to read them in this order:
 
 | Doc                              | Read it when…                                                                   |
 |----------------------------------|---------------------------------------------------------------------------------|
-| [syntax.md](syntax.md)           | You need the placeholder, filter, comment, and indentation rules.               |
+| [syntax.md](syntax.md)           | You need the placeholder, comment, and indentation rules.                       |
 | [templates.md](templates.md)     | You're constructing and rendering a single template at a time.                  |
 | [composition.md](composition.md) | You want a class to **be** the template — properties auto-bind to variables.    |
 | [integration.md](integration.md) | You're loading templates from disk or embedded resources, or wiring a generator.|
-| [ui.md](ui.md)                   | You're rendering server-side HTML/XML/SVG markup with auto-escaping (`Templar.UI`).|
 
 ## What lives where
 
 | Concept                | Page                                              |
 |------------------------|---------------------------------------------------|
-| `{{ var }}` / `{{ var \| filter }}` / `{{# comment }}` | [syntax.md](syntax.md)                  |
+| `{{ var }}` / `{{# comment }}`                   | [syntax.md](syntax.md)                          |
 | Multi-line indentation behavior                  | [syntax.md](syntax.md#indentation-behavior) |
-| Built-in filters (`upper`/`lower`/`pascal`/`camel`) | [syntax.md](syntax.md#built-in-filters), [templates.md](templates.md#filters) |
-| `Template.Parse`, `Set`, `Render`, `AddFilter`   | [templates.md](templates.md)                    |
+| `Template.Parse`, `Set`, `Render`                | [templates.md](templates.md)                    |
 | `RenderOptions` (newline + indent)               | [templates.md](templates.md#render-options)     |
-| `TemplateParseException` / `TemplateRenderException` | [templates.md](templates.md#exceptions), [integration.md](integration.md#exception-model) |
+| `TemplateParseException`                         | [templates.md](templates.md#exceptions), [integration.md](integration.md#exception-model) |
 | `Compositor`, `Structure`, `Populate`            | [composition.md](composition.md)                |
 | `[TemplateBind]` / `[TemplateIgnore]`            | [composition.md](composition.md#auto-binding-rules) |
 | `CSharpFile` preset                              | [composition.md](composition.md#worked-preset--csharpfile) |
-| `TemplateSet` — directories, embedded resources, filter/options propagation | [integration.md](integration.md) |
+| `TemplateSet` — directories, embedded resources, options propagation | [integration.md](integration.md) |
 | Bulk render / generator patterns                 | [integration.md](integration.md#patterns)       |
 | `.tpl` accessor generator (`Templates/*.tpl` → compiled `Compositor`) | [integration.md](integration.md#the-tpl-accessor-generator) |
-| `Templar.UI` — `UIComponent`, auto-escaping, `Markup` elements, `Document`, `Attr` | [ui.md](ui.md) |
-| `.html.tpl` generator, element DSL (`*.elements`) | [ui.md](ui.md#the-htmltpl-generator), [ui.md](ui.md#the-element-dsl) |
 
 ## Source pointers
 
@@ -48,9 +44,7 @@ string" to "I want to wire this into a build" is to read them in this order:
 | `CSharpFile`                         | `src/Presets/CSharpFile.cs`               |
 | `RenderOptions`                      | `src/Rendering/RenderOptions.cs`          |
 | Parser (`Template.Validate`)         | `src/Rendering/Template.cs`               |
-| Renderer (`Renderer.Drive`) + filters | `src/Rendering/`                         |
+| Renderer (`Renderer.Drive`)          | `src/Rendering/Renderer.cs`               |
 | `Sequence` (+ `Lines` / `BlankLines` / `CommaList` factories) | `src/Rendering/Sequence.cs` |
 | `TemplateAccessorGenerator` (`.tpl` → compiled `Compositor`) | `src/Templar.Generators/` |
-| `UIComponent`, `Element`, `Markup`, `Attr`, `Document`, `RawHtml` | `src/Templar.UI/`         |
-| `Templar.UI` generators (`ElementFactoryGenerator`, `HtmlComponentGenerator`) | `src/Templar.UI.Generators/` |
 | Test corpus (behavior contract)      | `tests/`                                  |

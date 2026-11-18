@@ -35,103 +35,6 @@ public class TemplateTests
     }
 
     [Fact]
-    public void Filter_Upper()
-    {
-        var t = Template.Parse("{{ name | upper }}");
-        t["name"] = "hello";
-        Assert.Equal("HELLO", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Lower()
-    {
-        var t = Template.Parse("{{ name | lower }}");
-        t["name"] = "HELLO";
-        Assert.Equal("hello", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Pascal()
-    {
-        var t = Template.Parse("{{ name | pascal }}");
-        t["name"] = "foo_bar_baz";
-        Assert.Equal("FooBarBaz", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Camel()
-    {
-        var t = Template.Parse("{{ name | camel }}");
-        t["name"] = "foo_bar_baz";
-        Assert.Equal("fooBarBaz", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Pascal_DashDelimiter()
-    {
-        var t = Template.Parse("{{ name | pascal }}");
-        t["name"] = "foo-bar-baz";
-        Assert.Equal("FooBarBaz", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Pascal_SpaceDelimiter()
-    {
-        var t = Template.Parse("{{ name | pascal }}");
-        t["name"] = "foo bar baz";
-        Assert.Equal("FooBarBaz", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Pascal_MixedDelimiters()
-    {
-        var t = Template.Parse("{{ name | pascal }}");
-        t["name"] = "foo-bar baz_qux";
-        Assert.Equal("FooBarBazQux", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Pascal_ConsecutiveDelimiters()
-    {
-        var t = Template.Parse("{{ name | pascal }}");
-        t["name"] = "foo -_ bar";
-        Assert.Equal("FooBar", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Camel_DashDelimiter()
-    {
-        var t = Template.Parse("{{ name | camel }}");
-        t["name"] = "foo-bar-baz";
-        Assert.Equal("fooBarBaz", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Camel_SpaceDelimiter()
-    {
-        var t = Template.Parse("{{ name | camel }}");
-        t["name"] = "foo bar baz";
-        Assert.Equal("fooBarBaz", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Camel_MixedDelimiters()
-    {
-        var t = Template.Parse("{{ name | camel }}");
-        t["name"] = "foo-bar baz_qux";
-        Assert.Equal("fooBarBazQux", t.Render());
-    }
-
-    [Fact]
-    public void Filter_Custom()
-    {
-        var t = Template.Parse("{{ val | shout }}");
-        t.AddFilter("shout", v => (v?.ToString() ?? "") + "!!!");
-        t["val"] = "hey";
-        Assert.Equal("hey!!!", t.Render());
-    }
-
-    [Fact]
     public void MultiLine_Value_AlignsToPlaceholderColumn()
     {
         var t = Template.Parse("    {{ body }}");
@@ -152,14 +55,6 @@ public class TemplateTests
     {
         var ex = Assert.Throws<TemplateParseException>(() => Template.Parse("{{ unclosed"));
         Assert.Equal(1, ex.Line);
-    }
-
-    [Fact]
-    public void UnknownFilter_ThrowsRenderException()
-    {
-        var t = Template.Parse("{{ x | bogus }}");
-        t["x"] = "v";
-        Assert.Throws<TemplateRenderException>(() => t.Render());
     }
 
     [Fact]

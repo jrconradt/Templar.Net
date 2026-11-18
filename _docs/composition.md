@@ -6,7 +6,7 @@ auto-bind into the template's variables by name. Render hundreds of files of
 the same shape with zero string-keyed boilerplate and zero re-parsing.
 
 For low-level placeholder rules see [syntax.md](syntax.md); for the
-`Template`-based equivalent see [templates.md](templates.md); for filter and
+`Template`-based equivalent see [templates.md](templates.md); for
 loading patterns see [integration.md](integration.md).
 
 ## The smallest example

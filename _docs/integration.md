@@ -1,18 +1,17 @@
 # Integration
 
 This page covers wiring Templar into a larger system: loading templates from
-disk or embedded resources, sharing filters and options across a batch of
+disk or embedded resources, sharing options across a batch of
 templates, handling failures, and the common shape of a code-generation
 workflow. For one-off templates see [templates.md](templates.md); for class-as-
 template authoring see [composition.md](composition.md).
 
 ## `TemplateSet` — a named batch of templates
 
-A `TemplateSet` is a name → template-source dictionary plus a shared filter
-table and a shared `RenderOptions`. You add templates by name, then resolve
+A `TemplateSet` is a name → template-source dictionary plus a shared
+`RenderOptions`. You add templates by name, then resolve
 each one to a fresh `Template` instance with `Get(name)`. Each `Get` returns a
-new `Template` parsed from the stored source, with the set's filters and
-options copied in.
+new `Template` parsed from the stored source, with the set's options copied in.
 
 ### Loading paths
 
@@ -53,38 +52,33 @@ if (set.Contains("Calculator"))
 `Get` throws `KeyNotFoundException` if the name is not registered. Use
 `Contains(name)` to test first when the call is conditional.
 
-## Filters and options propagate
+## Options propagate
 
-Filters added to the **set** are copied into every template the set produces.
-The same for `RenderOptions`. Configure once, share across everything you
-render through the set.
+`RenderOptions` set on the **set** are copied into every template the set
+produces. Configure once, share across everything you render through the set.
 
 ```csharp
 var set = new TemplateSet()
-    .Add("hello", "{{ who | shout }}")
-    .AddFilter("shout", v => (v?.ToString() ?? "").ToUpperInvariant() + "!")
+    .Add("hello", "Hello,\n{{ who }}")
     .WithOptions(new RenderOptions { Newline = "\r\n" });
 
 var t = set.Get("hello");
 t["who"] = "team";
-t.Render();   // → "TEAM!"
+t.Render();   // → "Hello,\r\nteam"
 ```
 
-Templates returned by `Get` are independent instances. Adding a filter to a
-returned template does **not** retroactively register it on the set or affect
-other templates.
+Templates returned by `Get` are independent instances.
 
 ## Exception model
 
-Three exception types are thrown across the Templar surface:
+Two exception types are thrown across the Templar surface:
 
 | Exception                    | When                                                                    | Useful members                                |
 |------------------------------|-------------------------------------------------------------------------|-----------------------------------------------|
 | `TemplateParseException`     | `Template.Parse` (or `Compositor.Render` on first instance of a type) sees malformed template text. | `Line`, `Column`                              |
-| `TemplateRenderException`    | `Render()` references an unknown filter (and others).                   | `FilterName`, `VariableName`, `TemplateName?` |
 | `KeyNotFoundException`       | `TemplateSet.Get(name)` for a name that wasn't added.                   | Standard BCL exception.                       |
 
-Catch the Templar-specific exceptions to surface template-source diagnostics
+Catch `TemplateParseException` to surface template-source diagnostics
 to whatever build pipeline you're wiring into.
 
 ## Patterns
@@ -151,17 +145,6 @@ foreach (var record in records)
 }
 ```
 
-### Custom filters
-
-Filters are `Func<object?, string>`. Register them where the rendered output
-needs them:
-
-- On a single `Template` when the filter is one-off.
-- On a `TemplateSet` when many templates share the same vocabulary.
-
-The four built-in filters (`upper`, `lower`, `pascal`, `camel`) can be
-overridden by registering a same-named filter at the template or set level.
-
 ### Newline + indent control
 
 `RenderOptions` is the configuration knob. Set it on the `TemplateSet` so
@@ -226,22 +209,17 @@ public sealed class Card : global::Templar.Rendering.Compositor
 
 Each distinct placeholder becomes a `required object?` property named in PascalCase,
 referenced directly by the compiled `RenderInto` — so a renamed or missing
-placeholder is a compile error rather than a silent empty render. Conditional
-variables (`{{? flag }}`) become properties too. A template with no placeholders
+placeholder is a compile error rather than a silent empty render. A template with no placeholders
 emits the class with none. Because the generated class carries no `Structure`
 string and is never parsed at runtime, its `.tpl` — unlike a hand-written
 `Compositor`'s embedded template — does **not** need to be an `EmbeddedResource`;
 listing it as `AdditionalFiles` (so the generator can read it at compile time) is
 enough.
 
-Compiled accessors apply the four built-in filters (`upper`/`lower`/`pascal`/`camel`);
-custom runtime-registered filters are a `Template`/`TemplateSet` feature and are not
-available in a compiled accessor.
-
 ### Malformed templates
 
-A `.tpl` whose conditional tags are unbalanced — a `{{?}}` or `{{?else}}` with no
-open conditional, or an unterminated `{{? … }}` — is reported at compile time as
+A `.tpl` with an unclosed tag, a `|` inside a tag, or a tag that opens with
+`{{?`, `{{&`, or `{{>` is reported at compile time as
 `TMPLR002` (severity `Error`, category `Templar`) carrying the template's file path
 and line. No accessor is emitted for that file, so the build fails with a located
 diagnostic instead of crashing the generator or emitting uncompilable C#.

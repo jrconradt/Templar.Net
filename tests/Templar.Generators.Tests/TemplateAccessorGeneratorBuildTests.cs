@@ -1,7 +1,7 @@
 using System.Linq;
 using Xunit;
 
-namespace Templar.UI.Generators.Tests;
+namespace Templar.Generators.Tests;
 
 public class TemplateAccessorGeneratorBuildTests
 {
@@ -33,22 +33,6 @@ public class TemplateAccessorGeneratorBuildTests
         Assert.Contains("w.Value(", source);
         Assert.Contains("Who", source);
         Assert.Contains("Place", source);
-    }
-
-    [Fact]
-    public void AdditionalText_tpl_with_conditional_and_filter_compiles_truthy_dispatch()
-    {
-        var sources = RunVerified("/proj/Templates/Banner.tpl",
-                                  "{{? show }}Hi {{ name | upper }}{{?else}}bye{{?}}");
-
-        var hint = sources.Keys.Single(k => k.EndsWith("Banner.g.cs"));
-        var source = sources[hint];
-
-        Assert.Contains("class Banner", source);
-        Assert.Contains("public override void RenderInto", source);
-        Assert.Contains("w.Truthy(", source);
-        Assert.Contains("Show", source);
-        Assert.Contains("Name", source);
     }
 
     [Fact]

@@ -9,7 +9,7 @@ public class IterativeEngineTests
     {
         public Compositor? Inner { get; init; }
         public string Leaf { get; init; } = "";
-        protected override string Structure => "[{{?inner}}{{inner}}{{?else}}{{leaf}}{{?}}]";
+        protected override string Structure => "[{{inner}}{{leaf}}]";
     }
 
     [Fact]
@@ -79,18 +79,5 @@ public class IterativeEngineTests
         var o = new Outer { Inside = new TwoLines() };
         var expected = "before\n    L1\n    L2\nafter";
         Assert.Equal(expected, o.Render());
-    }
-
-    [Fact]
-    public void Conditional_Nested_ManyLevels_Iterative()
-    {
-        var src = string.Concat(Enumerable.Repeat("{{?flag}}A", 200))
-                + "X"
-                + string.Concat(Enumerable.Repeat("{{?}}", 200));
-
-        var t = Template.Parse(src);
-        t["flag"] = true;
-        var output = t.Render();
-        Assert.Equal(new string('A', 200) + "X", output);
     }
 }

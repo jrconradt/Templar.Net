@@ -56,12 +56,4 @@ public class EscapeTests
         t["var"] = "X";
         Assert.Equal(@"\X", t.Render());
     }
-
-    [Fact]
-    public void EscapeInsideConditional()
-    {
-        var t = Template.Parse(@"{{?show}}\{{ x \}}{{?}}");
-        t["show"] = true;
-        Assert.Equal("{{ x }}", t.Render());
-    }
 }

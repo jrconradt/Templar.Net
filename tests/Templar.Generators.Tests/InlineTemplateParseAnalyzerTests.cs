@@ -6,7 +6,7 @@ using Templar.Generators;
 using Templar.Rendering;
 using Xunit;
 
-namespace Templar.UI.Generators.Tests;
+namespace Templar.Generators.Tests;
 
 public class InlineTemplateParseAnalyzerTests
 {

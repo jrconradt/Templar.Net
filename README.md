@@ -74,25 +74,10 @@ The multi-line `body` is injected at the `{{ body }}` column, so the rendered me
 | Form | Example | Effect |
 |------|---------|--------|
 | Variable | `{{ name }}` | Replaced with value (empty if unset) |
-| Filter | `{{ name \| pascal }}` | Value transformed by filter |
 | Comment | `{{# ignored }}` | Stripped entirely from output |
-| Conditional | `{{? flag }}…{{?}}` | Body rendered when `flag` is truthy |
-| Else branch | `{{? flag }}…{{?else}}…{{?}}` | Second arm rendered when `flag` is falsy |
-| Negation | `{{?!flag }}…{{?}}` | Body rendered when `flag` is falsy |
 | Escape | `\{{` · `\}}` · `\\` | Literal `{{`, `}}`, `\` |
 
-Variable and filter names are case-insensitive. A conditional tests one variable by name — `null`, `""`, `false`, and an empty `IEnumerable` are falsy; everything else is truthy. Conditional tags are inline: keep `{{? }}`…`{{?}}` on the same line as the text they guard. A line containing only value placeholders that all render empty is dropped entirely, trailing newline included.
-
-### Built-in Filters
-
-| Filter | Input | Output |
-|--------|-------|--------|
-| `upper` | `hello world` | `HELLO WORLD` |
-| `lower` | `Hello World` | `hello world` |
-| `pascal` | `hello_world` | `HelloWorld` |
-| `camel` | `hello_world` | `helloWorld` |
-
-Custom filters: `template.AddFilter("myFilter", val => ...)`.
+Variable names are case-insensitive. A line containing only value placeholders that all render empty is dropped entirely, trailing newline included.
 
 ## Composition
 
@@ -125,7 +110,6 @@ A `Sequence` composes other values, rendering and joining them by a separator wi
 |--------|---------|--------|
 | `IndentString` | four spaces | Unit of indentation for nested substitution |
 | `Newline` | `\n` | Output line ending; injected `\r\n` / `\r` are normalized to it |
-| `StrictUndefined` | `false` | When `true`, rendering a variable that was never set throws `TemplateRenderException` instead of emitting empty |
 
 Templar is trim- and AOT-safe (`IsTrimmable` / `IsAotCompatible`), so it can be embedded in published, trimmed, or NativeAOT code generators.
 
@@ -135,11 +119,10 @@ Long-form docs live in [`_docs/`](_docs/):
 
 | Page | Covers |
 |------|--------|
-| [syntax.md](_docs/syntax.md) | Placeholder, filter, comment, and indentation rules. |
+| [syntax.md](_docs/syntax.md) | Placeholder, comment, and indentation rules. |
 | [templates.md](_docs/templates.md) | Constructing, filling, and rendering a single template. |
 | [composition.md](_docs/composition.md) | `Compositor`, `Sequence`, attributes, the `CSharpFile` preset. |
-| [integration.md](_docs/integration.md) | `TemplateSet`, embedded resources, filter/options propagation, generators. |
-| [ui.md](_docs/ui.md) | `Templar.UI` — server-rendered HTML/XML/SVG component toolkit with auto-escaping. |
+| [integration.md](_docs/integration.md) | `TemplateSet`, embedded resources, options propagation, generators. |
 
 ## Build & Test
 
@@ -152,7 +135,7 @@ dotnet test Templar.slnx
 
 ## Status
 
-Active development; the core rendering API is stable, while the preset and `Templar.UI` surface are still evolving.
+Active development; the core rendering API is stable, while the preset surface is still evolving.
 
 ## License
 

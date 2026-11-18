@@ -119,66 +119,12 @@ public class SwallowTests
     }
 }
 
-public class StrictUndefinedTests
-{
-    [Fact]
-    public void StrictUndefined_Off_ByDefault()
-    {
-        var t = Template.Parse("[{{ x }}]");
-        Assert.Equal("[]", t.Render());
-    }
-
-    [Fact]
-    public void StrictUndefined_On_ThrowsOnMissingVariable()
-    {
-        var t = Template.Parse("[{{ x }}]")
-            .WithOptions(new RenderOptions { StrictUndefined = true });
-        var ex = Assert.Throws<TemplateRenderException>(() => t.Render());
-        Assert.Contains("Undefined variable 'x'", ex.Message);
-        Assert.Equal("x", ex.VariableName);
-    }
-
-    [Fact]
-    public void StrictUndefined_On_VariableSetToEmptyDoesNotThrow()
-    {
-        var t = Template.Parse("[{{ x }}]")
-            .WithOptions(new RenderOptions { StrictUndefined = true });
-        t["x"] = "";
-        Assert.Equal("[]", t.Render());
-    }
-
-    [Fact]
-    public void StrictUndefined_On_VariableSetToNullDoesNotThrow()
-    {
-        var t = Template.Parse("[{{ x }}]")
-            .WithOptions(new RenderOptions { StrictUndefined = true });
-        t["x"] = null;
-        Assert.Equal("[]", t.Render());
-    }
-
-    private sealed class StrictComposite : Compositor
-    {
-        public string Defined { get; init; } = "";
-        protected override string Structure => "{{ defined }}-{{ missing }}";
-    }
-
-    [Fact]
-    public void StrictUndefined_On_Compositor_ThrowsOnUnboundPlaceholder()
-    {
-        var c = new StrictComposite { Defined = "ok" }
-            .WithOptions(new RenderOptions { StrictUndefined = true });
-        var ex = Assert.Throws<TemplateRenderException>(() => c.Render());
-        Assert.Contains("missing", ex.Message);
-    }
-}
-
 public class PlaceholderScannerHonorsNewSyntaxSmokeTest
 {
     [Fact]
-    public void Conditional_Around_EscapedBraces_AroundPlaceholder()
+    public void EscapedBraces_AroundPlaceholder()
     {
-        var t = Template.Parse(@"{{?show}}\{{ {{ name }} \}}{{?}}");
-        t["show"] = true;
+        var t = Template.Parse(@"\{{ {{ name }} \}}");
         t["name"] = "X";
         Assert.Equal("{{ X }}", t.Render());
     }

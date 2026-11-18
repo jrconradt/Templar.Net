@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 
-namespace Templar.UI.Generators.Tests;
+namespace Templar.Generators.Tests;
 
 internal static class GeneratorHarness
 {
@@ -239,19 +239,15 @@ internal static class GeneratorHarness
             yield break;
         }
 
-        var uiBin = Path.Combine(root,
-                                 "src",
-                                 "Templar.UI",
-                                 "bin",
-                                 configuration,
-                                 "net10.0");
-        foreach (var name in new[] { "Templar.dll", "Templar.UI.dll" })
+        var candidate = Path.Combine(root,
+                                     "src",
+                                     "bin",
+                                     configuration,
+                                     "net10.0",
+                                     "Templar.dll");
+        if (File.Exists(candidate))
         {
-            var candidate = Path.Combine(uiBin, name);
-            if (File.Exists(candidate))
-            {
-                yield return candidate;
-            }
+            yield return candidate;
         }
     }
 }

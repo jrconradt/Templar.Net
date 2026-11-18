@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace Templar.UI.Generators.Tests;
+namespace Templar.Generators.Tests;
 
 public class TemplateLocationBoundaryTests
 {

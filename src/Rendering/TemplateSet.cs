@@ -5,7 +5,6 @@ namespace Templar.Rendering;
 public sealed class TemplateSet
 {
     private readonly Dictionary<string, string> _sources = new(StringComparer.OrdinalIgnoreCase);
-    private readonly FilterRegistry _filters = new();
     private RenderOptions _options = new();
 
     public TemplateSet Add(string name, string text)
@@ -70,12 +69,6 @@ public sealed class TemplateSet
         return this;
     }
 
-    public TemplateSet AddFilter(string name, Func<object?, string> filter)
-    {
-        _filters.Add(name, filter);
-        return this;
-    }
-
     public TemplateSet WithOptions(RenderOptions options)
     {
         _options = options;
@@ -92,11 +85,6 @@ public sealed class TemplateSet
         }
         
         var template = Template.Parse(source);
-
-        foreach (var filter in _filters.All)
-        {
-            template.AddFilter(filter.Key, filter.Value);
-        }
 
         return template.WithOptions(_options);
     }

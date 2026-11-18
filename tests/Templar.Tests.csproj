@@ -20,12 +20,9 @@
     <EmbeddedResource Include="Fixtures\notes.txt" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Remove="Templar.UI.Tests\**" />
-    <EmbeddedResource Remove="Templar.UI.Tests\**" />
-    <None Remove="Templar.UI.Tests\**" />
-    <Compile Remove="Templar.UI.Generators.Tests\**" />
-    <EmbeddedResource Remove="Templar.UI.Generators.Tests\**" />
-    <None Remove="Templar.UI.Generators.Tests\**" />
+    <Compile Remove="Templar.Generators.Tests\**" />
+    <EmbeddedResource Remove="Templar.Generators.Tests\**" />
+    <None Remove="Templar.Generators.Tests\**" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\src\Templar.csproj" />

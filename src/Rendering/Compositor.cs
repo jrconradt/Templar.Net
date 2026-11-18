@@ -36,7 +36,7 @@ public abstract class Compositor : IComposable
 
     public virtual string Render()
     {
-        var writer = new TemplarWriter(ResolveOptions());
+        var writer = new TemplarWriter(_options);
         RenderInto(writer);
         Renderer.Drive(writer);
         return writer.Result;
@@ -46,35 +46,24 @@ public abstract class Compositor : IComposable
     {
         Compile(out var source,
                 out var values,
-                out var filters,
                 out var options);
         writer.Frames.Push(new Renderer.ScanFrame
         {
             Source = source,
             Pos = 0,
             Values = values,
-            Filters = filters,
             Options = options,
         });
     }
 
-    protected virtual void Validate()
-    {
-    }
-
-    protected virtual RenderOptions ResolveOptions() => _options;
-
     internal virtual void Compile(out string source,
                                   out IDictionary<string, object?> values,
-                                  out FilterRegistry filters,
                                   out RenderOptions options)
     {
-        Validate();
         source = Structure;
-        var template = Template.ParseCached(source).WithOptions(ResolveOptions());
+        var template = Template.ParseCached(source).WithOptions(_options);
         Populate(template);
         values = template.ValuesInternal;
-        filters = template.FiltersInternal;
         options = template.OptionsInternal;
     }
 
