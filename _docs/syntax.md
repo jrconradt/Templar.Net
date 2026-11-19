@@ -24,6 +24,16 @@ A `null` value renders as an empty string.
 
 The value is rendered by the named template — the template's path under `Templates/` without `.tpl` — instead of by its type's default. On a list, each item is rendered by it. The value's type must carry the properties the named template uses.
 
+### Self spots: the same object by another template
+
+```
+{{ : Template/Name }}
+```
+
+A spot with no property name — the colon, then a template name — is a **self spot**. The object the template is rendering is rendered again, by the named template, at the spot's column, exactly like a nested template. The object's type must carry the properties the named template uses. A self spot inside a list item's template renders that item.
+
+`{{ : }}`, with no name or only whitespace after the colon, is malformed (`TMPLR002`). A self spot consumes no data, so self spots that lead back to a template already on the path (`A` → `B` → `A`, or `A` naming itself) would never end; they are rejected at compile time (`TMPLR009`).
+
 ## Comments
 
 ```
@@ -34,7 +44,7 @@ Comments are stripped entirely from the output. They produce no whitespace, no n
 
 ## Unsupported tags
 
-A tag that opens with `{{?`, `{{&`, or `{{>`, that contains a `|`, or whose content is not a property name optionally followed by `: Template/Name`, is rejected at compile time: the generator reports `TMPLR002` at the tag's line. Templates are compiled, never parsed at run time.
+A tag that opens with `{{?`, `{{&`, or `{{>`, that contains a `|`, or whose content is neither a property name optionally followed by `: Template/Name` nor `: Template/Name` alone, is rejected at compile time: the generator reports `TMPLR002` at the tag's line. Templates are compiled, never parsed at run time.
 
 ## Literal Text
 

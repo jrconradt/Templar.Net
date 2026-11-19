@@ -120,6 +120,7 @@ public {{ type }}({{ parameters : Injection/Parameter }})
 |------|---------|--------|
 | Spot | `{{ name }}` | The property's value, written by its declared type |
 | Spot naming a template | `{{ parameters : Injection/Parameter }}` | The value (or each item) rendered by that template |
+| Self spot | `{{ : Injection/Constructor }}` | The object being rendered, rendered by that template — a sub-view sharing its parent's view model |
 | Comment | `{{# ignored }}` | Stripped entirely from output |
 | Escape | `\{{` · `\}}` · `\\` | Literal `{{`, `}}`, `\` |
 
@@ -133,6 +134,7 @@ Property names are case-insensitive. A line containing only spots that all rende
 | `bool`, a number, `char`, an enum (or nullable) | invariant-formatted text |
 | a type with `[Template]` | that template |
 | anything, with `{{ x : T }}` | template `T`; the value's type must carry what `T` uses |
+| *(no property)* `{{ : T }}` | the object being rendered, by template `T`; its type must carry what `T` uses |
 | `Sequence<T>` | each item by `T`'s write (or `: T`), joined by the sequence's separator |
 | `IEnumerable<T>` | each item, one per line |
 | an interface or abstract class | the value's runtime type's `[Template]`; every implementation must have one |
