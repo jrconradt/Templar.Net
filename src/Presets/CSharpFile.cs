@@ -1,18 +1,17 @@
 namespace Templar.Presets;
 using Templar.Rendering;
 
-public class CSharpFile : Compositor
+public sealed class CSharpFile
 {
-    public virtual string Namespace { get; init; } = "";
+    public string Namespace { get; init; } = "";
 
-    [TemplateIgnore]
-    public virtual IEnumerable<string> Usings { get; init; } = Array.Empty<string>();
+    public IEnumerable<string> Usings { get; init; } = Array.Empty<string>();
 
-    public virtual string Body { get; init; } = "";
+    public string Body { get; init; } = "";
 
-    public virtual string Pragmas { get; init; } = "";
+    public string Pragmas { get; init; } = "";
 
-    public virtual string Header { get; init; } = "#nullable enable";
+    public string Header { get; init; } = "#nullable enable";
 
-    public Sequence UsingsBlock => Sequence.Lines(Usings.Select(u => new Using { Name = u }));
+    public Sequence<Using> UsingsBlock => Sequence.Lines(Usings.Select(u => new Using { Name = u }));
 }

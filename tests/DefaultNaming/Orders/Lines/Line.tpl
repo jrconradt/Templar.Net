@@ -1,1 +1,0 @@
-line {{ sku }} x{{ quantity }}

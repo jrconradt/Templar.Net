@@ -3,17 +3,22 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
+using Templar.Rendering;
+using Xunit;
 
 namespace Templar.Generators.Tests;
 
 internal static class GeneratorHarness
 {
+    public const string ProjectDir = "/proj/";
+
     private sealed class InMemoryText : AdditionalText
     {
         private readonly string _text;
@@ -63,50 +68,57 @@ internal static class GeneratorHarness
         public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => _global;
     }
 
-    public static IReadOnlyDictionary<string, string> Run(IIncrementalGenerator generator,
-                                                          (string Path, string Text)[] files,
-                                                          Dictionary<string, string>? globalOptions = null)
+    public sealed record Run(IReadOnlyDictionary<string, string> Sources,
+                             ImmutableArray<Diagnostic> Diagnostics,
+                             Compilation Output,
+                             GeneratorDriver Driver);
+
+    public static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
+
+    public static Run Generate(string[] sources,
+                               (string Path, string Text)[] templates,
+                               string rootNamespace = "App",
+                               string projectDir = ProjectDir)
     {
-        var run = Generate(generator,
-                           files,
-                           globalOptions);
-        return run.Sources;
+        var compilation = Compile(sources);
+        var driver = CreateDriver(templates, rootNamespace, projectDir);
+        return Advance(driver, compilation);
     }
 
-    public static IReadOnlyDictionary<string, string> RunVerified(IIncrementalGenerator generator,
-                                                                  (string Path, string Text)[] files,
-                                                                  Dictionary<string, string>? globalOptions = null)
+    public static CSharpCompilation Compile(string[] sources, params MetadataReference[] extra)
     {
-        var run = Generate(generator,
-                           files,
-                           globalOptions);
-        VerifyCompiles(run.Trees);
-        return run.Sources;
+        var trees = sources.Select(s => CSharpSyntaxTree.ParseText(s, ParseOptions));
+        return CSharpCompilation.Create("Generated" + Guid.NewGuid().ToString("N"),
+                                        trees,
+                                        References.Value.AddRange(extra),
+                                        new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+                                                                     nullableContextOptions: NullableContextOptions.Enable));
     }
 
-    public readonly record struct DiagnosticRun(IReadOnlyDictionary<string, string> Sources,
-                                                ImmutableArray<Diagnostic> Diagnostics);
-
-    public static DiagnosticRun RunCapturingDiagnostics(IIncrementalGenerator generator,
-                                                        (string Path, string Text)[] files,
-                                                        Dictionary<string, string>? globalOptions = null)
+    public static GeneratorDriver CreateDriver((string Path, string Text)[] templates,
+                                               string rootNamespace = "App",
+                                               string projectDir = ProjectDir)
     {
-        var compilation = CSharpCompilation.Create("Test",
-                                                   references: new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) },
-                                                   options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var texts = templates.Select(f => (AdditionalText)new InMemoryText(f.Path, f.Text)).ToImmutableArray();
+        var values = new Dictionary<string, string>
+        {
+            ["build_property.RootNamespace"] = rootNamespace,
+            ["build_property.ProjectDir"] = projectDir,
+        };
+        return CSharpGeneratorDriver.Create(generators: new[] { new RendererGenerator().AsSourceGenerator() },
+                                            additionalTexts: texts,
+                                            parseOptions: ParseOptions,
+                                            optionsProvider: new Provider(new Options(values)),
+                                            driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None,
+                                                                                      trackIncrementalGeneratorSteps: true));
+    }
 
-        var texts = files.Select(f => (AdditionalText)new InMemoryText(f.Path, f.Text)).ToImmutableArray();
-        var provider = new Provider(new Options(globalOptions ?? new Dictionary<string, string>()));
+    public static Run Advance(GeneratorDriver driver, Compilation compilation)
+    {
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics);
+        var result = driver.GetRunResult();
 
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(generators: new[] { generator.AsSourceGenerator() },
-                                                              additionalTexts: texts,
-                                                              parseOptions: null,
-                                                              optionsProvider: provider);
-
-        driver = driver.RunGenerators(compilation);
-        var runResult = driver.GetRunResult();
-
-        var failed = runResult.Results
+        var failed = result.Results
             .Where(r => r.Exception is not null)
             .Select(r => $"{r.Generator.GetGeneratorType().Name} threw: {r.Exception}")
             .ToList();
@@ -116,98 +128,70 @@ internal static class GeneratorHarness
         }
 
         var map = new Dictionary<string, string>();
-        foreach (var generatorResult in runResult.Results)
+        foreach (var generatorResult in result.Results)
         {
             foreach (var source in generatorResult.GeneratedSources)
             {
                 map[source.HintName] = source.SourceText.ToString();
             }
         }
-
-        return new DiagnosticRun(map, runResult.Diagnostics);
+        return new Run(map, diagnostics, output, driver);
     }
 
-    private readonly record struct GenerationRun(IReadOnlyDictionary<string, string> Sources,
-                                                 ImmutableArray<SyntaxTree> Trees);
-
-    private static GenerationRun Generate(IIncrementalGenerator generator,
-                                          (string Path, string Text)[] files,
-                                          Dictionary<string, string>? globalOptions)
+    public static Assembly Load(Run run)
     {
-        var compilation = CSharpCompilation.Create("Test",
-                                                   references: new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) },
-                                                   options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-
-        var texts = files.Select(f => (AdditionalText)new InMemoryText(f.Path, f.Text)).ToImmutableArray();
-        var provider = new Provider(new Options(globalOptions ?? new Dictionary<string, string>()));
-
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(generators: new[] { generator.AsSourceGenerator() },
-                                                              additionalTexts: texts,
-                                                              parseOptions: null,
-                                                              optionsProvider: provider);
-
-        driver = driver.RunGenerators(compilation);
-        var runResult = driver.GetRunResult();
-
-        var failed = runResult.Results
-            .Where(r => r.Exception is not null)
-            .Select(r => $"{r.Generator.GetGeneratorType().Name} threw: {r.Exception}")
-            .ToList();
-        if (failed.Count > 0)
-        {
-            throw new InvalidOperationException(string.Join("\n", failed));
-        }
-
-        var diagnostics = runResult.Diagnostics
+        Assert.Empty(run.Diagnostics);
+        var problems = run.Output.GetDiagnostics()
             .Where(d => d.Severity >= DiagnosticSeverity.Warning)
+            .Select(d => d.ToString())
             .ToList();
-        if (diagnostics.Count > 0)
-        {
-            throw new InvalidOperationException("Generator produced diagnostics:\n"
-                + string.Join("\n", diagnostics.Select(d => d.ToString())));
-        }
+        Assert.True(problems.Count == 0, string.Join("\n", problems));
 
-        var map = new Dictionary<string, string>();
-        var trees = ImmutableArray.CreateBuilder<SyntaxTree>();
-        foreach (var generatorResult in runResult.Results)
-        {
-            foreach (var source in generatorResult.GeneratedSources)
-            {
-                if (map.ContainsKey(source.HintName))
-                {
-                    throw new InvalidOperationException($"Duplicate generated hint name: {source.HintName}");
-                }
-                map[source.HintName] = source.SourceText.ToString();
-                trees.Add(source.SyntaxTree);
-            }
-        }
-        return new GenerationRun(map, trees.ToImmutable());
+        return Emit(run.Output);
     }
 
-    private static void VerifyCompiles(ImmutableArray<SyntaxTree> trees)
+    public static Assembly Emit(Compilation compilation)
     {
-        var verification = CSharpCompilation.Create("Verify",
-                                                    syntaxTrees: trees,
-                                                    references: VerificationReferences.Value,
-                                                    options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var stream = new MemoryStream();
+        var emit = compilation.Emit(stream);
+        Assert.True(emit.Success, string.Join("\n", emit.Diagnostics.Select(d => d.ToString())));
+        return Assembly.Load(stream.ToArray());
+    }
 
-        var errors = verification.GetDiagnostics()
-            .Where(d => d.Severity == DiagnosticSeverity.Error)
-            .ToList();
-        if (errors.Count > 0)
+    public static Assembly[] LoadTogether(params Compilation[] compilations)
+    {
+        var context = new AssemblyLoadContext("Together" + Guid.NewGuid().ToString("N"));
+        var loaded = new List<Assembly>();
+        context.Resolving += (_, name) => loaded.FirstOrDefault(a => a.GetName().Name == name.Name);
+        foreach (var compilation in compilations)
         {
-            throw new InvalidOperationException("Generated source did not compile:\n"
-                + string.Join("\n", errors.Select(d => d.ToString())));
+            using var stream = new MemoryStream();
+            var emit = compilation.Emit(stream);
+            Assert.True(emit.Success, string.Join("\n", emit.Diagnostics.Select(d => d.ToString())));
+            stream.Position = 0;
+            loaded.Add(context.LoadFromStream(stream));
+        }
+        return loaded.ToArray();
+    }
+
+    public static string Probe(Assembly assembly, string method = "Run")
+    {
+        var probe = assembly.GetType("App.Probe")!;
+        try
+        {
+            return (string)probe.GetMethod(method)!.Invoke(null, null)!;
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            throw ex.InnerException;
         }
     }
 
-    private static readonly Lazy<ImmutableArray<MetadataReference>> VerificationReferences =
-        new Lazy<ImmutableArray<MetadataReference>>(BuildVerificationReferences);
+    private static readonly Lazy<ImmutableArray<MetadataReference>> References = new(BuildReferences);
 
-    private static ImmutableArray<MetadataReference> BuildVerificationReferences()
+    private static ImmutableArray<MetadataReference> BuildReferences()
     {
         var references = ImmutableArray.CreateBuilder<MetadataReference>();
-
         var trusted = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? "")
             .Split(Path.PathSeparator)
             .Where(p => p.Length > 0 && p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
@@ -215,39 +199,7 @@ internal static class GeneratorHarness
         {
             references.Add(MetadataReference.CreateFromFile(path));
         }
-
-        foreach (var path in LocateTemplarAssemblies())
-        {
-            references.Add(MetadataReference.CreateFromFile(path));
-        }
-
+        references.Add(MetadataReference.CreateFromFile(typeof(Template).Assembly.Location));
         return references.ToImmutable();
-    }
-
-    private static IEnumerable<string> LocateTemplarAssemblies()
-    {
-        var asmDir = Path.GetDirectoryName(typeof(GeneratorHarness).Assembly.Location) ?? AppContext.BaseDirectory;
-        var configuration = asmDir.Replace('\\', '/').Contains("/Release/") ? "Release" : "Debug";
-
-        var root = asmDir;
-        while (root is not null && !File.Exists(Path.Combine(root, "Templar.slnx")))
-        {
-            root = Path.GetDirectoryName(root);
-        }
-        if (root is null)
-        {
-            yield break;
-        }
-
-        var candidate = Path.Combine(root,
-                                     "src",
-                                     "bin",
-                                     configuration,
-                                     "net10.0",
-                                     "Templar.dll");
-        if (File.Exists(candidate))
-        {
-            yield return candidate;
-        }
     }
 }

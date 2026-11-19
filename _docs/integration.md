@@ -1,177 +1,180 @@
 # Integration
 
-This page covers how a type's template is found and embedded, where the `.tpl`
-accessor generator fits and where it stops, string-keyed loading with
-`TemplateSet`, options, and failures. For the model itself see
+This page covers how a template finds its type, how the generator is wired, what it
+generates and reports, using Templar inside a source generator, string-keyed loading
+with `TemplateSet`, options, and failures. For the model itself see
 [composition.md](composition.md); for one-off templates see
 [templates.md](templates.md).
 
-## Finding a template for a type
+## Finding the type of a template
 
-A `Compositor` with no `Structure` override loads the embedded resource named
-`<FullName>.tpl` from its own assembly (a nested type's `+` becomes `.`),
-walking base types until one is found.
+Each `.tpl` listed as `AdditionalFiles` is the template of one type: the type named
+`<RootNamespace>.<folder path>.<file name>`, where the folder path is the template's
+folder relative to the project directory, each folder a dot-separated segment
+(sanitized to an identifier, `my-widgets` → `my_widgets`). In a project whose root
+namespace is `Shop`:
 
-The SDK names an `EmbeddedResource` `<RootNamespace>.<folder path>.<file name>`,
-each folder a dot-separated segment. In a project whose root namespace is
-`Shop`:
+| File                        | Type                         |
+|-----------------------------|------------------------------|
+| `Orders/Requisite.tpl`      | `Shop.Orders.Requisite`      |
+| `Orders/Lines/Stocked.tpl`  | `Shop.Orders.Lines.Stocked`  |
 
-| File                        | Default resource name            | Found by type                |
-|-----------------------------|----------------------------------|------------------------------|
-| `Orders/Requisite.tpl`      | `Shop.Orders.Requisite.tpl`      | `Shop.Orders.Requisite`      |
-| `Orders/Lines/Stocked.tpl`  | `Shop.Orders.Lines.Stocked.tpl`  | `Shop.Orders.Lines.Stocked`  |
+So a template beside its type finds it whenever the type's namespace follows its
+folder (the .NET convention, IDE0130) and the file is named for the type. The type
+is looked up in the project's own source only, and must be a sealed, non-generic,
+top-level class or record. A folder has no special name: any folder under the
+project works.
 
-So a template beside its type is found whenever the type's namespace follows
-its folder (the .NET convention, IDE0130) and the file is named for the type.
-Embed the templates with one line:
+## Wiring
+
+### From the package
+
+`Templar.Net` carries the generator (`analyzers/dotnet/cs/Templar.Generators.dll`)
+and build targets that expose `RootNamespace` and `ProjectDir` to it. List the
+templates as `AdditionalFiles` — one line in the `.csproj`:
 
 ```xml
 <ItemGroup>
-  <EmbeddedResource Include="**/*.tpl" />
+  <AdditionalFiles Include="**/*.tpl" />
 </ItemGroup>
 ```
 
-Where a type's namespace departs from its folder, name that one file after the
-type (the `Update` follows the `Include` that globbed it):
+The templates are read at compile time; they are not embedded and not shipped.
+
+### From source
+
+Referencing the projects directly, wire what the package's targets do:
 
 ```xml
 <ItemGroup>
-  <EmbeddedResource Update="Legacy/Invoice.tpl" LogicalName="Shop.Billing.Invoice.tpl" />
+  <ProjectReference Include="…/Templar.csproj" />
+  <ProjectReference Include="…/Templar.Generators.csproj"
+                    OutputItemType="Analyzer"
+                    ReferenceOutputAssembly="false"
+                    PrivateAssets="all" />
+  <AdditionalFiles Include="**/*.tpl" />
+  <CompilerVisibleProperty Include="RootNamespace" />
+  <CompilerVisibleProperty Include="ProjectDir" />
 </ItemGroup>
 ```
 
-`DependentUpon` does not do this. The SDK names a resource that depends on a
-`.cs` after that file's first class — `Shop.Orders.Requisite`, with the `.tpl`
-dropped — and fails the build (`MSB3041`) for a `.tpl` with no `.cs` beside it.
+Templar builds itself this way: its presets are plain types beside `.tpl` files,
+compiled by its own generator.
 
-When the lookup misses, `Render` throws `InvalidOperationException` (“…no
-embedded template resource was found in the inheritance chain”); compare
-`typeof(T).FullName + ".tpl"` with `typeof(T).Assembly.GetManifestResourceNames()`.
+## What it generates
 
-Templar's package adds no `EmbeddedResource` items and sets no resource names;
-its build targets only expose `RootNamespace` and `ProjectDir` to the accessor
-generator.
-
-## The `.tpl` accessor generator
-
-`TemplateAccessorGenerator` (in `src/Templar.Generators/`) goes the other way:
-template first. Each `.tpl` listed as `AdditionalFiles` under a
-project-relative `Templates/` folder becomes a sealed `Compositor` whose
-properties are the template's placeholders and whose `RenderInto` is the
-template compiled to sink calls. It is not the compiled form of a model type: a
-type you write never becomes an accessor, and an accessor is not a model.
-
-### What it generates
-
-For `Templates/Card.tpl`:
+For `Orders/Requisite.tpl` in project `App`:
 
 ```
-Hello {{ who }} and {{ place }}
+requisite {{ name }}
+{
+    {{ lines }}
+}
 ```
 
-the generator emits, into the `<RootNamespace>.Templates` namespace:
+beside
 
 ```csharp
+namespace App.Orders;
+
+public sealed class Requisite
+{
+    public required string Name { get; init; }
+    public required Sequence<Line> Lines { get; init; }
+}
+```
+
+(with `Line` a sealed type beside its own `Line.tpl`), the generator emits
+`App.Orders.Requisite.g.cs`:
+
+```csharp
+// <auto-generated/>
 #nullable enable
 
-namespace App.Templates;
+namespace App.Orders;
 
-[global::System.CodeDom.Compiler.GeneratedCode("Templar.Generators", "1.0.0")]
-public sealed class Card : global::Templar.Rendering.Compositor
+public static class RequisiteRenderer
 {
-
-    public required object? Who { get; init; }
-    public required object? Place { get; init; }
-
-    public override void RenderInto(global::Templar.Rendering.TemplarWriter w)
+    public static string Render(this global::App.Orders.Requisite model, global::Templar.Rendering.RenderOptions? options = null)
     {
-        w.Compiled(Steps(w));
+        return global::Templar.Rendering.TemplarWriter.Render(model, Steps, options);
     }
 
-    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable?> Steps(global::Templar.Rendering.TemplarWriter w)
+    internal static global::System.Collections.Generic.IEnumerator<object?> Steps(global::Templar.Rendering.TemplarWriter w, global::App.Orders.Requisite model)
     {
-        w.Literal("Hello ");
-        yield return w.Value(Who);
-        w.Literal(" and ");
-        yield return w.Value(Place);
+        w.Literal("requisite ");
+        w.Text(model.Name);
+        w.Literal("\n{\n    ");
+        yield return w.List(model.Lines, global::App.Orders.LineRenderer.Steps);
+        w.Literal("\n}");
         yield break;
+    }
+
+    [global::System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Register()
+    {
+        global::Templar.Rendering.RenderRegistry.Register<global::App.Orders.Requisite>(Steps);
     }
 }
 ```
 
-Each distinct placeholder becomes a `required object?` property named in
-PascalCase. A template with no placeholders emits the class with none. The
-`.tpl` is read at compile time, so it need not be an `EmbeddedResource`.
+Each hole is one write, chosen from the property's declared type
+([composition.md](composition.md#how-a-hole-is-written)): `w.Text` for a string,
+`w.Format` for a primitive or enum, `w.Compose(value, XRenderer.Steps)` for a type
+with a template, `w.List(value, …)` for a list, and
+`w.Compose(value, RenderRegistry.Steps)` for an interface. The generated code holds
+no `if`, no loop, and no other conditional; `null` and empty lists are handled inside
+`TemplarWriter`.
 
-### Limits
+## Diagnostics
 
-| The accessor                                  | So                                                                          |
-|-----------------------------------------------|-----------------------------------------------------------------------------|
-| Types every hole `required object?`           | The hole says nothing about what composes there. The caller constructs the class and fills every hole by hand. |
-| Is `sealed`                                   | No subtypes, so no variants: choosing between accessors is a choice the caller makes in code. |
-| Lives at `<RootNamespace>.Templates.<folders>.<Name>` | The full name a model type would have beside the same file under default resource naming. A model type at `Templates/Card.cs` with `Templates/Card.tpl` listed as `AdditionalFiles` is defined twice (`CS0101`). Keep model types and their templates out of `Templates/`. |
+Every template and hole is checked at compile time. Each diagnostic is an error in
+category `Templar`, located at the template (and the hole's line where there is one):
 
-Use it for a free-standing text with a few holes and no model behind it.
+| Id         | Reported when                                                                 |
+|------------|-------------------------------------------------------------------------------|
+| `TMPLR002` | The template is malformed: an unclosed tag, a `|` inside a tag, or a tag that opens with `{{?`, `{{&`, or `{{>`. Nothing is emitted for it. |
+| `TMPLR003` | The template is outside the project directory, so it has no folder path.     |
+| `TMPLR004` | No type in the project has the template's name (`<RootNamespace>.<folders>.<file>`). |
+| `TMPLR005` | The type is generic, nested, not sealed, static, file-local, a struct, or already the type of another template. |
+| `TMPLR006` | A hole matches no accessible, readable instance property of the type.         |
+| `TMPLR007` | A hole matches more than one property (names differing only in case).        |
+| `TMPLR008` | A hole's property type cannot render: not a string, primitive, enum, type with a template, `Sequence<T>` or `IEnumerable<T>` of one of these, or an interface whose implementations in the project all have templates. |
 
-### Malformed templates
+A hole that fails `TMPLR006`–`TMPLR008` is left out of the renderer, which is still
+emitted, so the build reports the template error alone. `TMPLR001` (a warning, from
+the analyzer in the same assembly) flags a string literal passed to `Template.Parse`:
+move it into a `.tpl` beside the type it renders.
 
-A `.tpl` with an unclosed tag, a `|` inside a tag, or a tag that opens with
-`{{?`, `{{&`, or `{{>` is reported at compile time as
-`TMPLR002` (severity `Error`, category `Templar`) carrying the template's file path
-and line. No accessor is emitted for that file, so the build fails with a located
-diagnostic instead of crashing the generator or emitting uncompilable C#.
+## Inside a source generator
 
-### Folder layout drives the namespace
-
-The folder path under `Templates/` extends the namespace; the file's leaf name
-(sanitized to a valid identifier) is the class name.
-
-| `.tpl` path                     | Generated type            |
-|---------------------------------|---------------------------|
-| `Templates/Card.tpl`            | `App.Templates.Card`      |
-| `Templates/Widgets/Button.tpl`  | `App.Templates.Widgets.Button` |
-
-A `.tpl` file outside a `Templates/` folder is ignored — the generator only
-claims templates under that root.
-
-### Wiring
-
-The generator reads two MSBuild properties through `CompilerVisibleProperty`
-(`RootNamespace` for the namespace root and `ProjectDir` to resolve each
-template's path relative to the project). Reference the generator as an analyzer
-and list the templates as `AdditionalFiles`:
+A source generator can model its output as types beside templates and call
+`model.Render()` in its pipeline. The generator project references `Templar.Net`
+(which compiles its templates) and ships `Templar.dll` beside itself to the
+compiler, so the analyzer loader can resolve it:
 
 ```xml
 <ItemGroup>
-  <ProjectReference Include="…/Templar.Generators.csproj"
-                    OutputItemType="Analyzer"
-                    ReferenceOutputAssembly="false" />
+  <PackageReference Include="Templar.Net" PrivateAssets="all" />
+  <AdditionalFiles Include="**/*.tpl" />
 </ItemGroup>
 
-<ItemGroup>
-  <CompilerVisibleProperty Include="RootNamespace" />
-  <CompilerVisibleProperty Include="ProjectDir" />
-</ItemGroup>
+<PropertyGroup>
+  <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>
+</PropertyGroup>
 
-<ItemGroup>
-  <AdditionalFiles Include="Templates/**/*.tpl" />
-</ItemGroup>
+<Target Name="GetDependencyTargetPaths" DependsOnTargets="ResolveReferences">
+  <ItemGroup>
+    <TargetPathWithTargetPlatformMoniker Include="@(ReferencePath->WithMetadataValue('FileName', 'Templar'))"
+                                         IncludeRuntimeDependency="false" />
+  </ItemGroup>
+</Target>
 ```
 
-### Usage
-
-```csharp
-using App.Templates;
-
-string output = new Card
-{
-    Who   = "World",
-    Place = "Templar",
-}.Render();
-```
-
-The property names are checked by the compiler, so a renamed or missing
-placeholder is a build error rather than a silent empty render.
+A consuming project references the generator with `OutputItemType="Analyzer"
+ReferenceOutputAssembly="false"`. `fixtures/Fixture.Generator` and
+`fixtures/Fixture.Consumer` in this repository build exactly that, and
+`FixtureConsumerTests` asserts the constant the consumer receives.
 
 ## `TemplateSet` — string-keyed templates
 
@@ -190,7 +193,9 @@ copied in.
 | `AddEmbeddedResource(Assembly asm, string resourceName)`        | One embedded resource in `asm`                        | Last `.X.tpl`-style segment — see below.      |
 | `AddEmbeddedTemplates(Assembly asm, string prefix, string extension = ".tpl")` | Every embedded resource in `asm` whose name starts with `prefix` and ends with `extension` | The name between `prefix` and `extension`. |
 
-All four return `this` for chaining.
+All four return `this` for chaining. A `.tpl` loaded this way is data, not the
+template of a type: embed it (or read it from disk) rather than listing it as
+`AdditionalFiles`, which would ask the generator for its type.
 
 ### Embedded resource naming
 
@@ -238,19 +243,16 @@ Templates returned by `Get` are independent instances.
 
 | Exception                    | When                                                                    | Useful members                                |
 |------------------------------|-------------------------------------------------------------------------|-----------------------------------------------|
-| `TemplateParseException`     | `Template.Parse` (or `Compositor.Render` on first instance of a type) sees malformed template text. | `Line`, `Column`                              |
-| `InvalidOperationException`  | `Compositor.Render` finds no `<FullName>.tpl` resource for the type or any base type, and `Structure` is not overridden. | Message names the type.                       |
+| `TemplateParseException`     | `Template.Parse` sees malformed template text. (A malformed `.tpl` beside a type is `TMPLR002` at compile time.) | `Line`, `Column`                              |
+| `InvalidOperationException`  | An interface-typed hole holds a value whose runtime type has no registered renderer (a type from outside the project). | Message names the type.                       |
 | `KeyNotFoundException`       | `TemplateSet.Get(name)` for a name that wasn't added.                   | Standard BCL exception.                       |
-
-Catch `TemplateParseException` to surface template-source diagnostics
-to whatever build pipeline you're wiring into.
 
 ## Patterns
 
 ### Rendering a model
 
 Build the model, render each root. Each root's type decides its template and
-every value under it composes by its own type.
+every value under it renders by its own type.
 
 ```csharp
 foreach (var requisite in requisites)
@@ -271,11 +273,10 @@ var output = t.Render();
 
 ### Newline + indent control
 
-`RenderOptions` is the configuration knob. Set it on a `Compositor` via
-`WithOptions`, on a `TemplateSet` so every `Get` inherits, or on a `Template`
-via `WithOptions`. Whichever level you set, the renderer honors the configured
-newline end-to-end (literal text, multi-line value injection, and the join used
-for `IEnumerable<string>` values).
+`RenderOptions` is the configuration knob. Pass it to a type's `Render(options)`,
+set it on a `TemplateSet` so every `Get` inherits, or on a `Template` via
+`WithOptions`. Whichever level you set, the renderer honors the configured
+newline end-to-end (literal text, multi-line values, and list separators).
 
 ## Zero dependencies
 

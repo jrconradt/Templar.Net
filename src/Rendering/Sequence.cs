@@ -1,45 +1,32 @@
 namespace Templar.Rendering;
 
-public sealed class Sequence : IComposable
+public static class Sequence
 {
-    private readonly IEnumerable<IComposable> _items;
-    private readonly string _separator;
-
-    public Sequence(IEnumerable<IComposable> items, string separator)
+    public static Sequence<T> Lines<T>(IEnumerable<T> items)
     {
-        _items = items;
-        _separator = separator;
+        return new Sequence<T>(items, "\n");
     }
 
-    public static Sequence Lines(IEnumerable<IComposable> items)
+    public static Sequence<T> BlankLines<T>(IEnumerable<T> items)
     {
-        return new Sequence(items, "\n");
+        return new Sequence<T>(items, "\n\n");
     }
 
-    public static Sequence BlankLines(IEnumerable<IComposable> items)
+    public static Sequence<T> CommaList<T>(IEnumerable<T> items)
     {
-        return new Sequence(items, "\n\n");
+        return new Sequence<T>(items, ", ");
+    }
+}
+
+public sealed class Sequence<T>
+{
+    public Sequence(IEnumerable<T> items, string separator)
+    {
+        Items = items;
+        Separator = separator;
     }
 
-    public static Sequence CommaList(IEnumerable<IComposable> items)
-    {
-        return new Sequence(items, ", ");
-    }
+    public IEnumerable<T> Items { get; }
 
-    public string Render()
-    {
-        var writer = new TemplarWriter(new RenderOptions());
-        RenderInto(writer);
-        Renderer.Drive(writer);
-        return writer.Result;
-    }
-
-    public void RenderInto(TemplarWriter writer)
-    {
-        writer.Frames.Push(new Renderer.SequenceFrame
-        {
-            Items = _items.GetEnumerator(),
-            Separator = _separator,
-        });
-    }
+    public string Separator { get; }
 }

@@ -19,5 +19,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Templar.csproj" />
     <ProjectReference Include="..\..\src\Templar.Generators\Templar.Generators.csproj" />
+    <ProjectReference Include="..\..\fixtures\Fixture.Consumer\Fixture.Consumer.csproj" />
   </ItemGroup>
 </Project>

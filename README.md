@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jrconradt/Templar.Net/actions/workflows/ci.yml/badge.svg)](https://github.com/jrconradt/Templar.Net/actions/workflows/ci.yml) ![.NET](https://img.shields.io/badge/.NET-10-512BD4) [![License](https://img.shields.io/badge/License-Apache_2.0-blue)](LICENSE)
 
-Type-resolved template composition for C# codegen — a type is its template, values compose by their own type, multi-line values inherit the placeholder's column. Trim/AOT-safe, zero dependencies.
+Type-resolved template composition for C# codegen — a plain type is its template, values compose by their own type, multi-line values inherit the placeholder's column, and a source generator checks it all at compile time. Trim/AOT-safe, zero dependencies.
 
 ## The Problem
 
@@ -44,12 +44,20 @@ Install from NuGet:
 dotnet add package Templar.Net
 ```
 
-Model what you generate as types. Each type is a `Compositor` with its template beside it, named for the type; its properties are the template's holes. In project `Shop`:
+List your templates for the generator — one line in the `.csproj`:
+
+```xml
+<ItemGroup>
+  <AdditionalFiles Include="**/*.tpl" />
+</ItemGroup>
+```
+
+Model what you generate as types. Each type is a plain sealed class or record with its template beside it, named for the type; its properties are the template's holes. In project `Shop`:
 
 ```
 Orders/
   Requisite.cs    Requisite.tpl
-  Line.cs
+  ILine.cs
   Stocked.cs      Stocked.tpl
   Backordered.cs  Backordered.tpl
 ```
@@ -59,23 +67,24 @@ using Templar.Rendering;
 
 namespace Shop.Orders;
 
-public sealed class Requisite : Compositor
+public sealed class Requisite
 {
     public required string Name { get; init; }
-    public required IReadOnlyList<Line> Lines { get; init; }
+    public required Sequence<ILine> Lines { get; init; }
 }
 
-public abstract class Line : Compositor
+public interface ILine
+{
+}
+
+public sealed class Stocked : ILine
 {
     public required string Sku { get; init; }
 }
 
-public sealed class Stocked : Line
+public sealed class Backordered : ILine
 {
-}
-
-public sealed class Backordered : Line
-{
+    public required string Sku { get; init; }
     public required string Eta { get; init; }
 }
 ```
@@ -96,21 +105,13 @@ backordered {{ sku }}
     eta {{ eta }}
 ```
 
-Embed the templates — one line in the `.csproj`:
-
-```xml
-<ItemGroup>
-  <EmbeddedResource Include="**/*.tpl" />
-</ItemGroup>
-```
-
 Build the model, render the root:
 
 ```csharp
 var requisite = new Requisite
 {
     Name  = "R-1",
-    Lines = [new Stocked { Sku = "A-100" }, new Backordered { Sku = "B-200", Eta = "May" }],
+    Lines = Sequence.Lines<ILine>([new Stocked { Sku = "A-100" }, new Backordered { Sku = "B-200", Eta = "May" }]),
 };
 
 Console.WriteLine(requisite.Render());
@@ -125,7 +126,7 @@ requisite R-1
 }
 ```
 
-The caller selects no template and fills no hole. Each type's template is found by its `FullName` (`Shop.Orders.Stocked` → resource `Shop.Orders.Stocked.tpl`, the SDK's default name for `Orders/Stocked.tpl` when the namespace follows the folder); each property binds to the hole of the same name; each value composes by its own type — `Stocked` and `Backordered` each by their own template at the `{{ lines }}` column. An empty list renders nothing and its line is dropped.
+The caller selects no template and fills no hole. At build time the generator finds each template's type by name (`Orders/Stocked.tpl` → `Shop.Orders.Stocked`), binds each hole to the property of the same name, and compiles the template into that type's `Render()`, choosing each hole's write from the property's declared type. Each line renders by its own type — `Stocked` and `Backordered` each by their own template at the `{{ lines }}` column. An empty list renders nothing and its line is dropped. A missing type, a hole with no property, or a property that cannot render is a compile error.
 
 ## Syntax
 
@@ -141,16 +142,16 @@ Variable names are case-insensitive. A line containing only value placeholders t
 
 | You have | You write |
 |----------|-----------|
-| A thing to generate | A `Compositor` subclass, with `<TypeName>.tpl` beside it |
+| A thing to generate | A sealed class or record, with `<TypeName>.tpl` beside it |
 | A hole in its template | A property named for the hole |
-| A variant of a thing | A subtype, with its own `.tpl` |
-| Many of a thing | A list of the base type |
+| A variant of a thing | An interface, with one sealed type per variant, each with its own `.tpl` |
+| Many of a thing | A `Sequence<T>` or an `IEnumerable<T>` |
 
-Values compose by their runtime type: a `string` is text; an `IComposable` (`Compositor`, `Sequence`) renders by its own type's template at the hole's column; an `IEnumerable<IComposable>` renders each item by its own type's template, one per line; `null` or an empty list renders nothing. A string value is never rescanned for placeholders.
+Each hole is written by its property's declared type: a `string` is text; a primitive or enum is formatted text; a type with a template renders by that template at the hole's column; a `Sequence<T>` renders each item by its own type, joined by the sequence's separator (`Sequence.Lines`, `Sequence.BlankLines`, `Sequence.CommaList`, or `new Sequence<T>(items, separator)`); any other `IEnumerable<T>` renders one item per line; an interface renders the value by its runtime type's template. `null` or an empty list renders nothing. A string value is never rescanned for placeholders. The generated renderers hold no conditional and the engine never recurses.
 
-A `Sequence` joins composed values by another separator — `Sequence.CommaList`, `Sequence.BlankLines`, or `new Sequence(items, separator)`. The `CSharpFile` preset renders a `.cs` file's header, pragmas, usings, file-scoped namespace, and body; its `Body` is a `string`, placed as text.
+The `CSharpFile` preset renders a `.cs` file's header, pragmas, usings, file-scoped namespace, and body; its `Body` is a `string`, placed as text.
 
-See [_docs/composition.md](_docs/composition.md) for the model, and [_docs/integration.md](_docs/integration.md) for how a template is found for a type.
+See [_docs/composition.md](_docs/composition.md) for the model, and [_docs/integration.md](_docs/integration.md) for how a template finds its type, what the generator emits, and its diagnostics.
 
 ## Templates without a type
 
@@ -167,14 +168,14 @@ See [_docs/templates.md](_docs/templates.md).
 
 ## Render Options
 
-`RenderOptions`, applied via `WithOptions(...)` on a `Compositor`, `Template`, or `TemplateSet`, controls rendering:
+`RenderOptions`, passed to a type's `Render(options)` or applied via `WithOptions(...)` on a `Template` or `TemplateSet`, controls rendering:
 
 | Option | Default | Effect |
 |--------|---------|--------|
 | `IndentString` | four spaces | Unit of indentation for nested substitution |
-| `Newline` | `\n` | Output line ending; injected `\r\n` / `\r` are normalized to it |
+| `Newline` | `\n` | Output line ending; injected `\r\n` / `\r` and list separators are normalized to it |
 
-Templar is trim- and AOT-safe (`IsTrimmable` / `IsAotCompatible`), so it can be embedded in published, trimmed, or NativeAOT code generators.
+Templar is trim- and AOT-safe (`IsTrimmable` / `IsAotCompatible`), so it can be embedded in published, trimmed, or NativeAOT code generators — including Roslyn source generators ([_docs/integration.md](_docs/integration.md#inside-a-source-generator)).
 
 ## Documentation
 
@@ -182,8 +183,8 @@ Long-form docs live in [`_docs/`](_docs/):
 
 | Page | Covers |
 |------|--------|
-| [composition.md](_docs/composition.md) | The model: a type is its template, values compose by type, variants, lists, the `CSharpFile` preset. |
-| [integration.md](_docs/integration.md) | How a template is found for a type; the `.tpl` accessor generator and its limits; `TemplateSet`; exceptions. |
+| [composition.md](_docs/composition.md) | The model: a type is its template, how each hole is written, variants, lists, the engine, the `CSharpFile` preset. |
+| [integration.md](_docs/integration.md) | How a template finds its type; wiring; the generated code; diagnostics; Templar inside a source generator; `TemplateSet`; exceptions. |
 | [syntax.md](_docs/syntax.md) | Placeholder, comment, and indentation rules. |
 | [templates.md](_docs/templates.md) | The string-keyed `Template` API. |
 

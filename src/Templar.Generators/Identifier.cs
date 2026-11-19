@@ -1,5 +1,5 @@
-using System.Collections.Generic;
 using System.Linq;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Templar.Generators;
 
@@ -7,16 +7,18 @@ internal static class Identifier
 {
     public static string Sanitize(string s)
     {
-        if (string.IsNullOrEmpty(s)) return "_";
+        if (string.IsNullOrEmpty(s))
+        {
+            return "_";
+        }
         var safe = new string(s.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
         return char.IsDigit(safe[0]) ? "_" + safe : safe;
     }
 
-    public static string UpperFirst(string s)
+    public static string Escape(string name)
     {
-        var safe = Sanitize(s);
-        return safe.Length > 0 && char.IsLower(safe[0])
-            ? char.ToUpperInvariant(safe[0]) + safe.Substring(1)
-            : safe;
+        return SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None
+            ? name
+            : "@" + name;
     }
 }

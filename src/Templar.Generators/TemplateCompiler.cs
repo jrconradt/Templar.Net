@@ -1,22 +1,28 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+
 namespace Templar.Generators;
 
 internal static class TemplateCompiler
 {
-    private enum Op
+    public enum Op
     {
         Lit,
         Val,
     }
 
-    private readonly struct Node
+    public readonly struct Node
     {
         public Op Op { get; }
         public string Text { get; }
+        public int Line { get; }
 
-        public Node(Op op, string text)
+        public Node(Op op, string text, int line)
         {
             Op = op;
             Text = text;
+            Line = line;
         }
     }
 
@@ -104,46 +110,17 @@ internal static class TemplateCompiler
         return null;
     }
 
-    public static string EmitClass(string ns, string className, string templateText)
-    {
-        var nodes = Parse(templateText);
-        var properties = CollectProperties(nodes);
-
-        var propertyLines = string.Join("\n",
-            properties.Select(p => $"    public required object? {p} {{ get; init; }}"));
-        var propertyBlock = properties.Count > 0 ? $"\n{propertyLines}\n" : "\n";
-
-        var steps = EmitSteps(nodes);
-
-        return "#nullable enable\n\n"
-            + $"namespace {ns};\n\n"
-            + "[global::System.CodeDom.Compiler.GeneratedCode(\"Templar.Generators\", \"1.0.0\")]\n"
-            + $"public sealed class {className} : global::Templar.Rendering.Compositor\n"
-            + "{\n"
-            + propertyBlock
-            + "\n"
-            + "    public override void RenderInto(global::Templar.Rendering.TemplarWriter w)\n"
-            + "    {\n"
-            + "        w.Compiled(Steps(w));\n"
-            + "    }\n\n"
-            + "    private global::System.Collections.Generic.IEnumerator<global::Templar.Rendering.IComposable?> Steps(global::Templar.Rendering.TemplarWriter w)\n"
-            + "    {\n"
-            + steps
-            + "        yield break;\n"
-            + "    }\n"
-            + "}\n";
-    }
-
-    private static List<Node> Parse(string text)
+    public static List<Node> Parse(string text)
     {
         var nodes = new List<Node>();
-        var lit = new List<char>();
+        var lit = new StringBuilder();
+        int line = 1;
 
         void FlushLit()
         {
-            if (lit.Count > 0)
+            if (lit.Length > 0)
             {
-                nodes.Add(new Node(Op.Lit, new string(lit.ToArray())));
+                nodes.Add(new Node(Op.Lit, lit.ToString(), 0));
                 lit.Clear();
             }
         }
@@ -158,23 +135,21 @@ internal static class TemplateCompiler
                 char n = text[p + 1];
                 if (n == '\\')
                 {
-                    lit.Add('\\');
+                    lit.Append('\\');
                     p += 2;
                     continue;
                 }
                 if (n == '{' && p + 2 < text.Length
                     && text[p + 2] == '{')
                 {
-                    lit.Add('{');
-                    lit.Add('{');
+                    lit.Append("{{");
                     p += 3;
                     continue;
                 }
                 if (n == '}' && p + 2 < text.Length
                     && text[p + 2] == '}')
                 {
-                    lit.Add('}');
-                    lit.Add('}');
+                    lit.Append("}}");
                     p += 3;
                     continue;
                 }
@@ -189,9 +164,18 @@ internal static class TemplateCompiler
                 int close = text.IndexOf("}}", contentStart, StringComparison.Ordinal);
                 if (close < 0)
                 {
-                    lit.Add(c);
+                    lit.Append(c);
                     p++;
                     continue;
+                }
+
+                int openLine = line;
+                for (int i = p; i < close + 2; i++)
+                {
+                    if (text[i] == '\n')
+                    {
+                        line++;
+                    }
                 }
 
                 string body = text.Substring(contentStart, close - contentStart).Trim();
@@ -203,11 +187,15 @@ internal static class TemplateCompiler
                 }
 
                 FlushLit();
-                nodes.Add(new Node(Op.Val, body));
+                nodes.Add(new Node(Op.Val, body, openLine));
                 continue;
             }
 
-            lit.Add(c);
+            if (c == '\n')
+            {
+                line++;
+            }
+            lit.Append(c);
             p++;
         }
 
@@ -215,87 +203,14 @@ internal static class TemplateCompiler
         return nodes;
     }
 
-    private static List<string> CollectProperties(List<Node> nodes)
+    public static string EscapeLiteral(string s)
     {
-        var ordered = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var node in nodes)
+        var sb = new StringBuilder(s.Length);
+        foreach (char c in s)
         {
-            if (node.Op != Op.Val)
-            {
-                continue;
-            }
-            if (!IsIdentifier(node.Text))
-            {
-                continue;
-            }
-            string prop = Identifier.UpperFirst(node.Text);
-            if (seen.Add(prop))
-            {
-                ordered.Add(prop);
-            }
+            sb.Append(EscapeChar(c));
         }
-        return ordered;
-    }
-
-    private static string EmitSteps(List<Node> nodes)
-    {
-        var lines = new List<string>();
-        int depth = 2;
-
-        string Pad(int d)
-        {
-            return new string(' ', d * 4);
-        }
-
-        foreach (var node in nodes)
-        {
-            switch (node.Op)
-            {
-                case Op.Lit:
-                {
-                    lines.Add($"{Pad(depth)}w.Literal(\"{EscapeLiteral(node.Text)}\");");
-                    break;
-                }
-                case Op.Val:
-                {
-                    if (!IsIdentifier(node.Text))
-                    {
-                        break;
-                    }
-                    string prop = Identifier.UpperFirst(node.Text);
-                    lines.Add($"{Pad(depth)}yield return w.Value({prop});");
-                    break;
-                }
-            }
-        }
-
-        return lines.Count > 0 ? string.Join("\n", lines) + "\n" : "";
-    }
-
-    private static bool IsIdentifier(string s)
-    {
-        if (string.IsNullOrEmpty(s))
-        {
-            return false;
-        }
-        if (!char.IsLetter(s[0]) && s[0] != '_')
-        {
-            return false;
-        }
-        for (int i = 1; i < s.Length; i++)
-        {
-            if (!char.IsLetterOrDigit(s[i]) && s[i] != '_')
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static string EscapeLiteral(string s)
-    {
-        return string.Concat(s.Select(EscapeChar));
+        return sb.ToString();
     }
 
     private static string EscapeChar(char c)
@@ -307,6 +222,7 @@ internal static class TemplateCompiler
             '\n' => "\\n",
             '\r' => "\\r",
             '\t' => "\\t",
+            _ when c < ' ' || c == (char)0x85 || c == (char)0x2028 || c == (char)0x2029 => $"\\u{(int)c:X4}",
             _ => $"{c}",
         };
     }

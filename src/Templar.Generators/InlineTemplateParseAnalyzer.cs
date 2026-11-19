@@ -12,11 +12,11 @@ public sealed class InlineTemplateParseAnalyzer : DiagnosticAnalyzer
     public static readonly DiagnosticDescriptor Rule = new(
         id: "TMPLR001",
         title: "Inline Template.Parse content belongs in a .tpl file",
-        messageFormat: "Move this template literal into a .tpl file and call it via the generated Templates.* accessor",
+        messageFormat: "Move this template literal into a .tpl file beside the type it renders",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Templar.Generators emits typed accessors for .tpl files. Inline string literals passed to Template.Parse bypass that pipeline and become unanalyzable.");
+        description: "Templar.Generators compiles each .tpl beside its type into that type's renderer, checked at compile time. Inline string literals passed to Template.Parse bypass that pipeline and become unanalyzable.");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
 

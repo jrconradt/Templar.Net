@@ -39,7 +39,16 @@
   </Target>
 
   <ItemGroup>
-    <EmbeddedResource Include="Presets\**\*.tpl" />
+    <ProjectReference Include="Templar.Generators\Templar.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <AdditionalFiles Include="Presets\**\*.tpl" />
+    <CompilerVisibleProperty Include="RootNamespace" />
+    <CompilerVisibleProperty Include="ProjectDir" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Templar.Tests" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\LICENSE" Pack="true" PackagePath="\" />

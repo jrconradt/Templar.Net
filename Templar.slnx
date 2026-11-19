@@ -3,6 +3,10 @@
     <Project Path="src/Templar.csproj" />
     <Project Path="src/Templar.Generators/Templar.Generators.csproj" />
   </Folder>
+  <Folder Name="/fixtures/">
+    <Project Path="fixtures/Fixture.Generator/Fixture.Generator.csproj" />
+    <Project Path="fixtures/Fixture.Consumer/Fixture.Consumer.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Templar.Tests.csproj" />
     <Project Path="tests/Templar.Generators.Tests/Templar.Generators.Tests.csproj" />

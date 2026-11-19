@@ -1,21 +1,15 @@
 using Templar.Rendering;
+using Templar.Tests.Models.Iterative;
 using Xunit;
 
 namespace Templar.Tests;
 
 public class IterativeEngineTests
 {
-    private sealed class Nest : Compositor
-    {
-        public Compositor? Inner { get; init; }
-        public string Leaf { get; init; } = "";
-        protected override string Structure => "[{{inner}}{{leaf}}]";
-    }
-
     [Fact]
-    public void DeeplyNested_Compositors_DoNotOverflowStack()
+    public void DeeplyNested_Types_DoNotOverflowStack()
     {
-        Compositor leaf = new Nest { Leaf = "X" };
+        var leaf = new Nest { Leaf = "X" };
         for (int i = 0; i < 500; i++)
             leaf = new Nest { Inner = leaf };
 
@@ -24,20 +18,13 @@ public class IterativeEngineTests
         Assert.StartsWith(new string('[', 501), output);
     }
 
-    private sealed class Item : Compositor
-    {
-        public string Name { get; init; } = "";
-        protected override string Structure => "item:{{name}}";
-    }
-
     [Fact]
     public void Sequence_ManyItems_DoNotOverflowStack()
     {
         var items = Enumerable.Range(0, 1000)
-            .Select(i => (Compositor)new Item { Name = i.ToString() })
+            .Select(i => new Item { Name = i.ToString() })
             .ToArray();
-        var seq = Sequence.Lines(items);
-        var output = seq.Render();
+        var output = new Items { All = Sequence.Lines(items) }.Render();
         var lines = output.Split('\n');
         Assert.Equal(1000, lines.Length);
         Assert.Equal("item:0", lines[0]);
@@ -49,32 +36,21 @@ public class IterativeEngineTests
     {
         var inner1 = Sequence.CommaList(new[]
         {
-            (Compositor)new Item { Name = "a" },
+            new Item { Name = "a" },
             new Item { Name = "b" },
         });
         var inner2 = Sequence.CommaList(new[]
         {
-            (Compositor)new Item { Name = "c" },
+            new Item { Name = "c" },
             new Item { Name = "d" },
         });
-        var outer = Sequence.Lines(new IComposable[] { inner1, inner2 });
+        var outer = new Rows { All = Sequence.Lines(new[] { inner1, inner2 }) };
 
         Assert.Equal("item:a, item:b\nitem:c, item:d", outer.Render());
     }
 
-    private sealed class Outer : Compositor
-    {
-        public Compositor? Inside { get; init; }
-        protected override string Structure => "before\n    {{inside}}\nafter";
-    }
-
-    private sealed class TwoLines : Compositor
-    {
-        protected override string Structure => "L1\nL2";
-    }
-
     [Fact]
-    public void NestedCompositor_AtIndentedColumn_AlignsContinuationLines()
+    public void NestedType_AtIndentedColumn_AlignsContinuationLines()
     {
         var o = new Outer { Inside = new TwoLines() };
         var expected = "before\n    L1\n    L2\nafter";

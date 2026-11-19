@@ -1,8 +1,6 @@
-using Templar.Rendering;
-
 namespace Templar.Tests.DefaultNaming.Orders;
 
-// No Untemplated.tpl, and no template anywhere in its chain.
-public sealed class Untemplated : Compositor
+// No Untemplated.tpl beside it: no renderer is generated for it.
+public sealed class Untemplated
 {
 }

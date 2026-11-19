@@ -5,12 +5,6 @@ namespace Templar.Tests;
 
 public class UnsupportedMarkerTests
 {
-    private sealed class Conditioned : Compositor
-    {
-        public bool A { get; init; }
-        protected override string Structure => "{{? a }}x{{?}}";
-    }
-
     [Fact]
     public void Conditional_marker_throws_with_position()
     {
@@ -41,12 +35,6 @@ public class UnsupportedMarkerTests
         Assert.Contains("'|'", ex.Message);
         Assert.Equal(1, ex.Line);
         Assert.Equal(3, ex.Column);
-    }
-
-    [Fact]
-    public void Compositor_structure_with_conditional_marker_throws_on_render()
-    {
-        Assert.Throws<TemplateParseException>(() => new Conditioned { A = true }.Render());
     }
 
     [Fact]

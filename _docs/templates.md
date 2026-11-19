@@ -59,9 +59,10 @@ Values can be any `object?`. The renderer materializes them as follows:
 | `null` / unset            | Empty string.                                                    |
 | `string`                  | The string itself.                                               |
 | `IEnumerable<string>`     | Joined with the configured newline; the join behaves as a multi-line value (each item gets indented to the placeholder column). |
-| `Compositor` / `Sequence` (any `IComposable`) | Rendered **structurally** into the placeholder's column — nested composition with indentation preserved across the boundary. |
-| `IEnumerable<IComposable>` | Each item rendered and joined by the configured newline, indentation preserved. |
 | Anything else             | `value.ToString() ?? ""`.                                        |
+
+A `Template` value is text. To compose types, give them templates of their own
+([composition.md](composition.md)) and render the root with `model.Render()`.
 
 ## Render options
 
@@ -107,13 +108,13 @@ catch (TemplateParseException ex)
 }
 ```
 
-## When to reach for a template (vs. a Compositor)
+## When to reach for a template (vs. a type)
 
 `Template` is the string-keyed layer underneath: the caller picks the text and
 fills each hole by key. Use it for one-off text, or text constructed at
 runtime, with no type behind it.
 
 When what you generate has a shape, model it as types
-([composition.md](composition.md)): each type finds its own template, its
-properties are the holes, and values compose by their own type — the caller
-selects nothing and fills nothing.
+([composition.md](composition.md)): each type's template sits beside it, its
+properties are the holes, the generator checks both at compile time, and values
+compose by their own type — the caller selects nothing and fills nothing.

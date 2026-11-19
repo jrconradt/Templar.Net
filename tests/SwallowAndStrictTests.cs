@@ -1,4 +1,5 @@
 using Templar.Rendering;
+using Templar.Tests.Models.Swallow;
 using Xunit;
 
 namespace Templar.Tests;
@@ -88,34 +89,17 @@ public class SwallowTests
     }
 
     [Fact]
-    public void NestedCompositor_RendersEmpty_SwallowsHostLine()
+    public void NestedList_RendersEmpty_SwallowsHostLine()
     {
-        var t = Template.Parse(
-            """
-            before
-                {{ inner }}
-            after
-            """);
-        t["inner"] = Sequence.Lines([]);
-        Assert.Equal("before\nafter", t.Render());
-    }
-
-    private sealed class EmptyComposite : Compositor
-    {
-        protected override string Structure => "";
+        var host = new ListHost { Inner = Sequence.Lines(Array.Empty<Empty>()) };
+        Assert.Equal("before\nafter", host.Render());
     }
 
     [Fact]
-    public void NestedCompositor_WithEmptyStructure_SwallowsHostLine()
+    public void NestedType_WithEmptyTemplate_SwallowsHostLine()
     {
-        var t = Template.Parse(
-            """
-            before
-                {{ inner }}
-            after
-            """);
-        t["inner"] = new EmptyComposite();
-        Assert.Equal("before\nafter", t.Render());
+        var host = new TypeHost { Inner = new Empty() };
+        Assert.Equal("before\nafter", host.Render());
     }
 }
 
