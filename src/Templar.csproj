@@ -43,7 +43,7 @@
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />
-    <AdditionalFiles Include="Presets\**\*.tpl" />
+    <AdditionalFiles Include="Templates\**\*.tpl" />
     <CompilerVisibleProperty Include="RootNamespace" />
     <CompilerVisibleProperty Include="ProjectDir" />
   </ItemGroup>

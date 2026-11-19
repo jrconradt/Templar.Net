@@ -48,18 +48,23 @@ List your templates for the generator — one line in the `.csproj`:
 
 ```xml
 <ItemGroup>
-  <AdditionalFiles Include="**/*.tpl" />
+  <AdditionalFiles Include="Templates/**/*.tpl" />
 </ItemGroup>
 ```
 
-Model what you generate as types. Each type is a plain sealed class or record with its template beside it, named for the type; its properties are the template's holes. In project `Shop`:
+Model what you generate as types. Each type is a plain sealed class or record, its `.cs` wherever your code lives; its properties are the template's holes. Its template lives under `Templates/`, at the type's namespace path below the project's root namespace, named for the type. In project `Shop`:
 
 ```
 Orders/
-  Requisite.cs    Requisite.tpl
+  Requisite.cs
   ILine.cs
-  Stocked.cs      Stocked.tpl
-  Backordered.cs  Backordered.tpl
+  Stocked.cs
+  Backordered.cs
+Templates/
+  Orders/
+    Requisite.tpl
+    Stocked.tpl
+    Backordered.tpl
 ```
 
 ```csharp
@@ -89,7 +94,7 @@ public sealed class Backordered : ILine
 }
 ```
 
-`Requisite.tpl`:
+`Templates/Orders/Requisite.tpl`:
 
 ```
 requisite {{ name }}
@@ -98,7 +103,7 @@ requisite {{ name }}
 }
 ```
 
-`Stocked.tpl` is `stocked {{ sku }}`; `Backordered.tpl`:
+`Templates/Orders/Stocked.tpl` is `stocked {{ sku }}`; `Templates/Orders/Backordered.tpl`:
 
 ```
 backordered {{ sku }}
@@ -126,7 +131,7 @@ requisite R-1
 }
 ```
 
-The caller selects no template and fills no hole. At build time the generator finds each template's type by name (`Orders/Stocked.tpl` → `Shop.Orders.Stocked`), binds each hole to the property of the same name, and compiles the template into that type's `Render()`, choosing each hole's write from the property's declared type. Each line renders by its own type — `Stocked` and `Backordered` each by their own template at the `{{ lines }}` column. An empty list renders nothing and its line is dropped. A missing type, a hole with no property, or a property that cannot render is a compile error.
+The caller selects no template and fills no hole. At build time the generator finds each template's type by its path under `Templates/` (`Templates/Orders/Stocked.tpl` → `Shop.Orders.Stocked`, wherever `Stocked.cs` sits), binds each hole to the property of the same name, and compiles the template into that type's `Render()`, choosing each hole's write from the property's declared type. Each line renders by its own type — `Stocked` and `Backordered` each by their own template at the `{{ lines }}` column. An empty list renders nothing and its line is dropped. A template outside `Templates/`, a missing type, a hole with no property, or a property that cannot render is a compile error.
 
 ## Syntax
 
@@ -142,7 +147,7 @@ Variable names are case-insensitive. A line containing only value placeholders t
 
 | You have | You write |
 |----------|-----------|
-| A thing to generate | A sealed class or record, with `<TypeName>.tpl` beside it |
+| A thing to generate | A sealed class or record, with its template at `Templates/<namespace path>/<TypeName>.tpl` |
 | A hole in its template | A property named for the hole |
 | A variant of a thing | An interface, with one sealed type per variant, each with its own `.tpl` |
 | Many of a thing | A `Sequence<T>` or an `IEnumerable<T>` |

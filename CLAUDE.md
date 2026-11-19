@@ -9,11 +9,11 @@ dotnet build Templar.slnx          # build everything (library, generator, fixtu
 dotnet test Templar.slnx           # run the xUnit test suites
 ```
 
-Target framework is **net10.0**. Tests use **xUnit** in two projects — `tests/Templar.Tests.csproj` (runtime; its model types sit beside `.tpl` files under `tests/Models/` and `tests/DefaultNaming/` and are compiled by the generator) and `tests/Templar.Generators.Tests/` (generator, diagnostics, emitted code, and the fixture consumer). The test files are the authoritative behavior spec; consult `tests/` directly rather than relying on any inventory written here. The main library has zero external dependencies.
+Target framework is **net10.0**. Tests use **xUnit** in two projects — `tests/Templar.Tests.csproj` (runtime; its model types live under `tests/Models/` and `tests/DefaultNaming/`, their `.tpl` files under `tests/Templates/` at the types' namespace paths, compiled by the generator) and `tests/Templar.Generators.Tests/` (generator, diagnostics, emitted code, and the fixture consumer). The test files are the authoritative behavior spec; consult `tests/` directly rather than relying on any inventory written here. The main library has zero external dependencies.
 
 ## Architecture
 
-Templar is a template engine for C# code generation. A plain, sealed, non-generic, top-level class or record `X` is a template when `X.tpl` sits beside it as an `AdditionalFile`. The pipeline:
+Templar is a template engine for C# code generation. Templates live under `Templates/`; types live where the code lives. A plain, sealed, non-generic, top-level class or record `X` has a template when `X.tpl` is an `AdditionalFile` under `<ProjectDir>/Templates/` whose path after `Templates/` is `X`'s namespace path below `RootNamespace` (`Templates/Injection/Constructor.tpl` → `<RootNamespace>.Injection.Constructor`, wherever its `.cs` sits). The pipeline:
 
 ```
 X.tpl + X → RendererGenerator (compile time: resolve type, validate, choose each hole's write) → XRenderer.Steps (flat iterator)
@@ -36,16 +36,16 @@ Variable names are **case-insensitive**. Whitespace-only lines whose placeholder
 
 | Type | Location | Role |
 |------|----------|------|
-| `RendererGenerator` | `src/Templar.Generators/RendererGenerator.cs` | Incremental generator. Each `.tpl` → `<RootNamespace>.<folders>.<file>` (source types only, via `compilation.Assembly.GetTypeByMetadataName`); emits `XRenderer` with `Render(this X, RenderOptions?)`, the flat `Steps` iterator, and a module initializer registering `Steps`. Pipeline outputs are equatable records (`PipelineRecords.cs`, `EquatableArray<T>`). |
+| `RendererGenerator` | `src/Templar.Generators/RendererGenerator.cs` | Incremental generator. Each `.tpl` under `<ProjectDir>/Templates/` → `<RootNamespace>.<folders after Templates/>.<file>` (source types only, via `compilation.Assembly.GetTypeByMetadataName`); emits `XRenderer` with `Render(this X, RenderOptions?)`, the flat `Steps` iterator, and a module initializer registering `Steps`. Pipeline outputs are equatable records (`PipelineRecords.cs`, `EquatableArray<T>`). |
 | `TemplateResolver` | `src/Templar.Generators/TemplateResolver.cs` | The compile-time predicates: type resolution and shape, hole → property, and the write per declared type (string → `w.Text`, primitive/enum → `w.Format`, mapped type → `w.Compose(v, XRenderer.Steps)`, `Sequence<T>`/`IEnumerable<T>` → `w.List`, interface → `w.Compose(v, RenderRegistry.Steps)`). Diagnostics `TMPLR002`–`TMPLR008` (`Descriptors.cs`, tracked in `AnalyzerReleases.Unshipped.md`). |
-| `TemplateCompiler`, `TemplateLocation` | `src/Templar.Generators/` | Template validation/parsing for the generator; template path → folder segments + leaf under `ProjectDir`. |
-| `InlineTemplateParseAnalyzer` | `src/Templar.Generators/` | `TMPLR001` — a string literal passed to `Template.Parse` belongs in a `.tpl` beside a type. |
+| `TemplateCompiler`, `TemplateLocation` | `src/Templar.Generators/` | Template validation/parsing for the generator; template path → folder segments + leaf under `<ProjectDir>/Templates/` (outside it: `TMPLR003`). |
+| `InlineTemplateParseAnalyzer` | `src/Templar.Generators/` | `TMPLR001` — a string literal passed to `Template.Parse` belongs in a `.tpl` under `Templates/`. |
 | `TemplarWriter` | `src/Rendering/TemplarWriter.cs` | The render sink — owns output, indentation, line-swallow state, the frame stack, and the public writes generated renderers call (`Literal`, `Text`, `Format`, `Compose`, `List`, the `*Item` steps, static `Render`). `null` and empty lists are handled here, so generated code holds no conditional. |
 | `RenderRegistry` | `src/Rendering/RenderRegistry.cs` | `Type` → renderer, filled by generated module initializers (`Register` overwrites); `Steps` dispatches an interface-typed value by runtime type, throwing for an unregistered type. The only runtime decision. |
 | `Sequence<T>` (+ static `Sequence.Lines`/`BlankLines`/`CommaList`) | `src/Rendering/Sequence.cs` | A list and its separator. Separators go through `WriteSeparator`, with `\n` translated to `RenderOptions.Newline`. |
 | `Template` | `src/Rendering/Template.cs` | The string-keyed lower layer — parse, set variables, render. Hosts `Validate` (the parse-time scanner). Values are text (`string`, `IEnumerable<string>`, else `ToString()`). |
 | `TemplateSet` | `src/Rendering/TemplateSet.cs` | Load string-keyed templates by name from strings, directories, or embedded resources |
-| `CSharpFile`, `Using` | `src/Presets/` | Preset plain types beside their `.tpl`, compiled by Templar's own generator |
+| `CSharpFile`, `Using` | `src/Presets/` | Preset plain types, their `.tpl` in `src/Templates/Presets/`, compiled by Templar's own generator |
 
 ### Parsing & rendering
 
@@ -61,7 +61,7 @@ A type is its template. Holes bind to properties by name at compile time; each h
 
 ### Build wiring
 
-`src/Templar.csproj` references `Templar.Generators` as an analyzer (`OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all"`), lists `Presets/**/*.tpl` as `AdditionalFiles`, and makes `RootNamespace`/`ProjectDir` compiler-visible; `tests/Templar.Tests.csproj` does the same for its model folders. The generator has no reference to Templar.dll. The package ships the generator under `analyzers/dotnet/cs` and build targets exposing `RootNamespace`/`ProjectDir`. `fixtures/Fixture.Generator` (a source generator whose model types are compiled by Templar, shipping Templar.dll via `GetDependencyTargetPaths`) and `fixtures/Fixture.Consumer` prove the Roslyn analyzer-loader path.
+`src/Templar.csproj` references `Templar.Generators` as an analyzer (`OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all"`), lists `Templates/**/*.tpl` as `AdditionalFiles`, and makes `RootNamespace`/`ProjectDir` compiler-visible; `tests/Templar.Tests.csproj` and `fixtures/Fixture.Generator` do the same for their `Templates/` folders. The generator has no reference to Templar.dll. The package ships the generator under `analyzers/dotnet/cs` and build targets exposing `RootNamespace`/`ProjectDir`. `fixtures/Fixture.Generator` (a source generator whose model types are compiled by Templar, shipping Templar.dll via `GetDependencyTargetPaths`) and `fixtures/Fixture.Consumer` prove the Roslyn analyzer-loader path.
 
 ### Presets
 
@@ -72,4 +72,4 @@ A type is its template. Holes bind to properties by name at compile time; each h
 - Sealed by default; braces on every `if`; Allman; hand-written scanners, no regex; no XML docs; xUnit `Assert.Equal(expected, actual)`
 - Fluent API — `Template.Set()` and `WithOptions()` return `this`
 - `RenderOptions` controls indent string (default 4 spaces) and newline character
-- Parse errors throw `TemplateParseException` (with line/column); template errors beside a type are compile-time diagnostics
+- Parse errors throw `TemplateParseException` (with line/column); errors in a `.tpl` under `Templates/`, or a `.tpl` outside it, are compile-time diagnostics

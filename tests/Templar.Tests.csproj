@@ -19,7 +19,7 @@
     <EmbeddedResource Include="Fixtures\Sample.tpl" />
     <EmbeddedResource Include="Fixtures\Solo.tpl" LogicalName="Solo.tpl" />
     <EmbeddedResource Include="Fixtures\notes.txt" />
-    <AdditionalFiles Include="DefaultNaming\**\*.tpl;Models\**\*.tpl" />
+    <AdditionalFiles Include="Templates\**\*.tpl" />
     <CompilerVisibleProperty Include="RootNamespace" />
     <CompilerVisibleProperty Include="ProjectDir" />
   </ItemGroup>

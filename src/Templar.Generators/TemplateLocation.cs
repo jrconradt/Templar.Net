@@ -16,20 +16,21 @@ internal sealed class TemplateLocation
         LeafName = leaf;
     }
 
+    public static string Root(string projectDir)
+    {
+        return Path.Combine(Path.GetFullPath(projectDir), "Templates") + Path.DirectorySeparatorChar;
+    }
+
     public static TemplateLocation? From(string absolutePath, string projectDir)
     {
         var full = Path.GetFullPath(absolutePath);
-        var dir = Path.GetFullPath(projectDir);
-        var dirWithSep = dir.EndsWith($"{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                      || dir.EndsWith($"{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal)
-            ? dir
-            : dir + Path.DirectorySeparatorChar;
-        if (!full.StartsWith(dirWithSep, StringComparison.OrdinalIgnoreCase))
+        var root = Root(projectDir);
+        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        var rel = full.Substring(dirWithSep.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var rel = full.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var noExt = rel.Substring(0, rel.Length - 4);
         var parts = noExt.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)

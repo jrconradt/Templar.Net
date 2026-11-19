@@ -3,8 +3,8 @@
 Templar is a type-resolved template composition engine for C# code
 generation: a plain type is its template, its properties are the template's
 holes, and every value composes by its own type. Its generator compiles each
-template beside its type into that type's renderer and checks both at compile
-time. This folder is the long-form reference; the project
+template under `Templates/` into the renderer of the type at its namespace path
+and checks both at compile time. This folder is the long-form reference; the project
 [README](../README.md) is the elevator pitch and quick-start.
 
 ## Reading order
@@ -50,7 +50,7 @@ API sit underneath:
 | `TemplarWriter` (the render sink and the writes generated renderers call) | `src/Rendering/TemplarWriter.cs` |
 | `RenderRegistry` (renderers by runtime type, for interface holes) | `src/Rendering/RenderRegistry.cs` |
 | `Sequence<T>` (+ `Sequence.Lines` / `BlankLines` / `CommaList`) | `src/Rendering/Sequence.cs` |
-| `CSharpFile`, `Using`                | `src/Presets/`                            |
+| `CSharpFile`, `Using`                | `src/Presets/` (templates in `src/Templates/Presets/`) |
 | `RenderOptions`                      | `src/Rendering/RenderOptions.cs`          |
 | Parser (`Template.Validate`)         | `src/Rendering/Template.cs`               |
 | Engine (`Renderer.Drive`)            | `src/Rendering/Renderer.cs`               |

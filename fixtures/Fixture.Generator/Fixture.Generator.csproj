@@ -22,7 +22,7 @@
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />
-    <AdditionalFiles Include="**\*.tpl" />
+    <AdditionalFiles Include="Templates\**\*.tpl" />
     <CompilerVisibleProperty Include="RootNamespace" />
     <CompilerVisibleProperty Include="ProjectDir" />
   </ItemGroup>

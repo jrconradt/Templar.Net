@@ -13,7 +13,7 @@ public class IncrementalTests
     [Fact]
     public void Unrelated_edit_leaves_the_generated_output_cached()
     {
-        var driver = GeneratorHarness.CreateDriver(new[] { ("/proj/Card.tpl", "Hello {{ who }}") });
+        var driver = GeneratorHarness.CreateDriver(new[] { ("/proj/Templates/Card.tpl", "Hello {{ who }}") });
         var compilation = GeneratorHarness.Compile(new[] { Source });
         var first = GeneratorHarness.Advance(driver, compilation);
 
@@ -33,7 +33,7 @@ public class IncrementalTests
     [Fact]
     public void Pipeline_outputs_hold_no_symbol_compilation_or_location()
     {
-        var driver = GeneratorHarness.CreateDriver(new[] { ("/proj/Card.tpl", "Hello {{ who }} {{ missing }}") });
+        var driver = GeneratorHarness.CreateDriver(new[] { ("/proj/Templates/Card.tpl", "Hello {{ who }} {{ missing }}") });
         var run = GeneratorHarness.Advance(driver, GeneratorHarness.Compile(new[] { Source }));
 
         var result = run.Driver.GetRunResult().Results.Single();

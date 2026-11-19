@@ -24,7 +24,7 @@ Comments are stripped entirely from the output. They produce no whitespace, no n
 
 ## Unsupported tags
 
-A tag that opens with `{{?`, `{{&`, or `{{>`, or that contains a `|`, is rejected when the template is parsed: `Template.Parse` throws `TemplateParseException` with the line and column, and the generator reports `TMPLR002` for a `.tpl` beside a type, at compile time.
+A tag that opens with `{{?`, `{{&`, or `{{>`, or that contains a `|`, is rejected when the template is parsed: `Template.Parse` throws `TemplateParseException` with the line and column, and the generator reports `TMPLR002` for a `.tpl` under `Templates/`, at compile time.
 
 ## Literal Text
 

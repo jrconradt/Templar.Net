@@ -68,7 +68,7 @@ internal static class TemplateResolver
             var location = TemplateLocation.From(file.Path, settings.ProjectDir!);
             if (location is null)
             {
-                outputs.Add(Failed(file, "TMPLR003", 1, file.Path, settings.ProjectDir!));
+                outputs.Add(Failed(file, "TMPLR003", 1, file.Path, TemplateLocation.Root(settings.ProjectDir!)));
                 continue;
             }
 

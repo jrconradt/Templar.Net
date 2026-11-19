@@ -58,11 +58,11 @@ public class InlineTemplateParseAnalyzerTests
     }
 
     [Fact]
-    public void Message_points_to_a_tpl_beside_the_type_it_renders()
+    public void Message_points_to_a_tpl_under_Templates()
     {
         var diagnostics = Analyze("var t = Template.Parse(\"Hello {{ who }}\");");
         var diagnostic = Assert.Single(diagnostics, d => d.Id == "TMPLR001");
-        Assert.Equal("Move this template literal into a .tpl file beside the type it renders", diagnostic.GetMessage());
+        Assert.Equal("Move this template literal into a .tpl file under Templates/ for the type it renders", diagnostic.GetMessage());
     }
 
     [Fact]

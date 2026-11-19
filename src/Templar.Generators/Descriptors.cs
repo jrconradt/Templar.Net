@@ -13,14 +13,14 @@ internal static class Descriptors
         isEnabledByDefault: true,
         description: "The .tpl file has an unclosed tag or an unsupported tag marker and cannot be compiled.");
 
-    public static readonly DiagnosticDescriptor OutsideProject = new(
+    public static readonly DiagnosticDescriptor OutsideTemplates = new(
         id: "TMPLR003",
-        title: "Template outside the project directory",
-        messageFormat: "Template '{0}' is outside the project directory '{1}', so no type can be resolved for it",
+        title: "Template outside the Templates folder",
+        messageFormat: "Template '{0}' is outside the Templates folder '{1}', so no type can be resolved for it",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A .tpl maps to the type named by RootNamespace and its folder path under ProjectDir; a .tpl outside ProjectDir has no folder path.");
+        description: "Templates live under <ProjectDir>/Templates/: a .tpl's path after Templates/ is its type's namespace path below RootNamespace. A .tpl outside Templates/ has no namespace path.");
 
     public static readonly DiagnosticDescriptor NoType = new(
         id: "TMPLR004",
@@ -29,7 +29,7 @@ internal static class Descriptors
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A .tpl is the template of the type named RootNamespace + folder path + file name; declare that type beside it.");
+        description: "A .tpl under Templates/ is the template of the type named RootNamespace + its folder path after Templates/ + its file name; declare that type in the project.");
 
     public static readonly DiagnosticDescriptor TypeShape = new(
         id: "TMPLR005",
@@ -72,7 +72,7 @@ internal static class Descriptors
         return id switch
         {
             "TMPLR002" => MalformedTemplate,
-            "TMPLR003" => OutsideProject,
+            "TMPLR003" => OutsideTemplates,
             "TMPLR004" => NoType,
             "TMPLR005" => TypeShape,
             "TMPLR006" => NoProperty,

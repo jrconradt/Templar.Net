@@ -8,22 +8,25 @@ with `TemplateSet`, options, and failures. For the model itself see
 
 ## Finding the type of a template
 
-Each `.tpl` listed as `AdditionalFiles` is the template of one type: the type named
-`<RootNamespace>.<folder path>.<file name>`, where the folder path is the template's
-folder relative to the project directory, each folder a dot-separated segment
-(sanitized to an identifier, `my-widgets` → `my_widgets`). In a project whose root
-namespace is `Shop`:
+Templates live under `Templates/`; types live where the code lives. Each `.tpl`
+under `<ProjectDir>/Templates/`, listed as `AdditionalFiles`, is the template of one
+type: its path after `Templates/` is the type's namespace path below the project's
+`RootNamespace`. The type is named `<RootNamespace>.<folder path>.<file name>`, where
+the folder path is the template's folder relative to `Templates/`, each folder a
+dot-separated segment (sanitized to an identifier, `my-widgets` → `my_widgets`). In a
+project whose root namespace is `Shop`:
 
-| File                        | Type                         |
-|-----------------------------|------------------------------|
-| `Orders/Requisite.tpl`      | `Shop.Orders.Requisite`      |
-| `Orders/Lines/Stocked.tpl`  | `Shop.Orders.Lines.Stocked`  |
+| File                                  | Type                          |
+|---------------------------------------|-------------------------------|
+| `Templates/Orders/Requisite.tpl`      | `Shop.Orders.Requisite`       |
+| `Templates/Orders/Lines/Stocked.tpl`  | `Shop.Orders.Lines.Stocked`   |
+| `Templates/Injection/Constructor.tpl` | `Shop.Injection.Constructor`  |
 
-So a template beside its type finds it whenever the type's namespace follows its
-folder (the .NET convention, IDE0130) and the file is named for the type. The type
-is looked up in the project's own source only, and must be a sealed, non-generic,
-top-level class or record. A folder has no special name: any folder under the
-project works.
+The type's `.cs` file can sit in any folder: `Templates/Injection/Constructor.tpl`
+is the template of `Shop.Injection.Constructor` wherever `Constructor.cs` is. The
+type is looked up in the project's own source only, and must be a sealed,
+non-generic, top-level class or record. A `.tpl` listed as `AdditionalFiles` outside
+`Templates/` is a compile-time error (`TMPLR003`).
 
 ## Wiring
 
@@ -35,7 +38,7 @@ templates as `AdditionalFiles` — one line in the `.csproj`:
 
 ```xml
 <ItemGroup>
-  <AdditionalFiles Include="**/*.tpl" />
+  <AdditionalFiles Include="Templates/**/*.tpl" />
 </ItemGroup>
 ```
 
@@ -52,18 +55,18 @@ Referencing the projects directly, wire what the package's targets do:
                     OutputItemType="Analyzer"
                     ReferenceOutputAssembly="false"
                     PrivateAssets="all" />
-  <AdditionalFiles Include="**/*.tpl" />
+  <AdditionalFiles Include="Templates/**/*.tpl" />
   <CompilerVisibleProperty Include="RootNamespace" />
   <CompilerVisibleProperty Include="ProjectDir" />
 </ItemGroup>
 ```
 
-Templar builds itself this way: its presets are plain types beside `.tpl` files,
-compiled by its own generator.
+Templar builds itself this way: its presets are plain types in `src/Presets/`, their
+templates in `src/Templates/Presets/`, compiled by its own generator.
 
 ## What it generates
 
-For `Orders/Requisite.tpl` in project `App`:
+For `Templates/Orders/Requisite.tpl` in project `App`:
 
 ```
 requisite {{ name }}
@@ -72,7 +75,7 @@ requisite {{ name }}
 }
 ```
 
-beside
+and
 
 ```csharp
 namespace App.Orders;
@@ -84,7 +87,7 @@ public sealed class Requisite
 }
 ```
 
-(with `Line` a sealed type beside its own `Line.tpl`), the generator emits
+(with `Line` a sealed type with its own `Templates/Orders/Line.tpl`), the generator emits
 `App.Orders.Requisite.g.cs`:
 
 ```csharp
@@ -134,8 +137,8 @@ category `Templar`, located at the template (and the hole's line where there is 
 | Id         | Reported when                                                                 |
 |------------|-------------------------------------------------------------------------------|
 | `TMPLR002` | The template is malformed: an unclosed tag, a `|` inside a tag, or a tag that opens with `{{?`, `{{&`, or `{{>`. Nothing is emitted for it. |
-| `TMPLR003` | The template is outside the project directory, so it has no folder path.     |
-| `TMPLR004` | No type in the project has the template's name (`<RootNamespace>.<folders>.<file>`). |
+| `TMPLR003` | The template is outside `<ProjectDir>/Templates/`, so it has no namespace path. |
+| `TMPLR004` | No type in the project has the template's name (`<RootNamespace>.<folders after Templates/>.<file>`). |
 | `TMPLR005` | The type is generic, nested, not sealed, static, file-local, a struct, or already the type of another template. |
 | `TMPLR006` | A hole matches no accessible, readable instance property of the type.         |
 | `TMPLR007` | A hole matches more than one property (names differing only in case).        |
@@ -144,11 +147,11 @@ category `Templar`, located at the template (and the hole's line where there is 
 A hole that fails `TMPLR006`–`TMPLR008` is left out of the renderer, which is still
 emitted, so the build reports the template error alone. `TMPLR001` (a warning, from
 the analyzer in the same assembly) flags a string literal passed to `Template.Parse`:
-move it into a `.tpl` beside the type it renders.
+move it into a `.tpl` under `Templates/` for the type it renders.
 
 ## Inside a source generator
 
-A source generator can model its output as types beside templates and call
+A source generator can model its output as types with templates and call
 `model.Render()` in its pipeline. The generator project references `Templar.Net`
 (which compiles its templates) and ships `Templar.dll` beside itself to the
 compiler, so the analyzer loader can resolve it:
@@ -156,7 +159,7 @@ compiler, so the analyzer loader can resolve it:
 ```xml
 <ItemGroup>
   <PackageReference Include="Templar.Net" PrivateAssets="all" />
-  <AdditionalFiles Include="**/*.tpl" />
+  <AdditionalFiles Include="Templates/**/*.tpl" />
 </ItemGroup>
 
 <PropertyGroup>
@@ -243,7 +246,7 @@ Templates returned by `Get` are independent instances.
 
 | Exception                    | When                                                                    | Useful members                                |
 |------------------------------|-------------------------------------------------------------------------|-----------------------------------------------|
-| `TemplateParseException`     | `Template.Parse` sees malformed template text. (A malformed `.tpl` beside a type is `TMPLR002` at compile time.) | `Line`, `Column`                              |
+| `TemplateParseException`     | `Template.Parse` sees malformed template text. (A malformed `.tpl` under `Templates/` is `TMPLR002` at compile time.) | `Line`, `Column`                              |
 | `InvalidOperationException`  | An interface-typed hole holds a value whose runtime type has no registered renderer (a type from outside the project). | Message names the type.                       |
 | `KeyNotFoundException`       | `TemplateSet.Get(name)` for a name that wasn't added.                   | Standard BCL exception.                       |
 
