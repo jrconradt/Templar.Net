@@ -126,15 +126,50 @@ internal sealed class TemplateResolver
         {
             foreach (var node in declared.Nodes)
             {
-                if (node.Op == TemplateCompiler.Op.Val && node.Template is not null && !_templates.ContainsKey(node.Template))
+                if (node.Template is not null && !_templates.ContainsKey(node.Template))
                 {
+                    var subject = node.Op == TemplateCompiler.Op.Self ? "Self spot" : $"Spot '{node.Text}'";
                     Report("TMPLR004",
                            Site.Line(declared.Path, node.Line),
-                           $"Spot '{node.Text}' at line {node.Line.ToString(CultureInfo.InvariantCulture)} of template '{declared.Name}'",
+                           $"{subject} at line {node.Line.ToString(CultureInfo.InvariantCulture)} of template '{declared.Name}'",
                            node.Template);
                 }
             }
         }
+
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var declared in _templates.Values.OrderBy(d => d.Name, StringComparer.Ordinal))
+        {
+            if (!visited.Contains(declared.Name))
+            {
+                FollowSelfSpots(declared, new List<string>(), visited);
+            }
+        }
+    }
+
+    private void FollowSelfSpots(Declared template, List<string> path, HashSet<string> visited)
+    {
+        visited.Add(template.Name);
+        path.Add(template.Name);
+        foreach (var node in template.Nodes)
+        {
+            if (node.Op != TemplateCompiler.Op.Self || !_templates.TryGetValue(node.Template!, out var next))
+            {
+                continue;
+            }
+            int start = path.IndexOf(next.Name);
+            if (start >= 0)
+            {
+                var cycle = path.Skip(start).Concat(new[] { next.Name }).Select(n => $"'{n}'");
+                Report("TMPLR009", Site.Line(template.Path, node.Line), string.Join(" -> ", cycle));
+                continue;
+            }
+            if (!visited.Contains(next.Name))
+            {
+                FollowSelfSpots(next, path, visited);
+            }
+        }
+        path.RemoveAt(path.Count - 1);
     }
 
     private void SeedTypes()
@@ -259,6 +294,16 @@ internal sealed class TemplateResolver
             if (node.Op == TemplateCompiler.Op.Lit)
             {
                 pair.Body.Append("        w.Literal(\"").Append(TemplateCompiler.EscapeLiteral(node.Text)).Append("\");\n");
+                continue;
+            }
+
+            if (node.Op == TemplateCompiler.Op.Self)
+            {
+                if (_templates.TryGetValue(node.Template!, out var named))
+                {
+                    var steps = Reach(pair.Type, named, Site.Line(template.Path, node.Line)).Template.Steps;
+                    pair.Body.Append("        yield return w.Compose(model, ").Append(steps).Append(");\n");
+                }
                 continue;
             }
 

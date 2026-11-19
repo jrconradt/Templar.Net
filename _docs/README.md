@@ -21,7 +21,7 @@ the syntax sits underneath:
 
 | Concept                | Page                                              |
 |------------------------|---------------------------------------------------|
-| `{{ spot }}` / `{{ spot : Template }}` / `{{# comment }}` | [syntax.md](syntax.md)               |
+| `{{ spot }}` / `{{ spot : Template }}` / `{{ : Template }}` / `{{# comment }}` | [syntax.md](syntax.md) |
 | Multi-line indentation behavior                  | [syntax.md](syntax.md#indentation-behavior) |
 | The model — templates are views, objects their view models | [composition.md](composition.md#the-model) |
 | `[Template]` defaults                            | [composition.md](composition.md#a-types-default-template) |
@@ -31,7 +31,7 @@ the syntax sits underneath:
 | The iterative engine                             | [composition.md](composition.md#the-engine)     |
 | `CSharpFile` preset                              | [composition.md](composition.md#worked-preset--csharpfile) |
 | Template names                                   | [integration.md](integration.md#template-names) |
-| Pairs, generated code, diagnostics `TMPLR002`–`TMPLR008` | [integration.md](integration.md#pairs)  |
+| Pairs, generated code, diagnostics `TMPLR002`–`TMPLR009` | [integration.md](integration.md#pairs)  |
 | `Compositor.ResolveTemplate` at run time, `RenderOptions` | [integration.md](integration.md#run-time) |
 | Templar inside a source generator                | [integration.md](integration.md#inside-a-source-generator) |
 

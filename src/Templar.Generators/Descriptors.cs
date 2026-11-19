@@ -11,7 +11,7 @@ internal static class Descriptors
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The .tpl file has an unclosed tag, an unsupported tag marker, or a spot that is not a property name optionally followed by ': TemplateName'.");
+        description: "The .tpl file has an unclosed tag, an unsupported tag marker, or a spot that is neither a property name optionally followed by ': TemplateName' nor ': TemplateName' alone.");
 
     public static readonly DiagnosticDescriptor OutsideTemplates = new(
         id: "TMPLR003",
@@ -67,6 +67,15 @@ internal static class Descriptors
         isEnabledByDefault: true,
         description: "A value renders as text (string, primitive, enum), by a template (a ': TemplateName' spot, or its type's [Template]), as a list (Sequence<T>, IEnumerable<T>), or by its runtime type's [Template] (an interface or abstract class whose implementations all carry one).");
 
+    public static readonly DiagnosticDescriptor SelfCycle = new(
+        id: "TMPLR009",
+        title: "Self spots form a cycle",
+        messageFormat: "Self spots form a cycle: {0}",
+        category: "Templar",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A self spot '{{ : TemplateName }}' renders the object its template is rendering by another template, consuming no data; self spots that lead back to a template already on the path would render the same object forever.");
+
     public static DiagnosticDescriptor ById(string id)
     {
         return id switch
@@ -78,6 +87,7 @@ internal static class Descriptors
             "TMPLR006" => NoProperty,
             "TMPLR007" => AmbiguousProperty,
             "TMPLR008" => CannotRender,
+            "TMPLR009" => SelfCycle,
             _ => throw new System.ArgumentOutOfRangeException(nameof(id), id, "Unknown Templar diagnostic id"),
         };
     }

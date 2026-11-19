@@ -28,10 +28,11 @@ No `.tpl` is read or parsed at run time; template text is baked into the generat
 
 - `{{ property }}` — spot, written by the property's declared type
 - `{{ property : Template/Name }}` — spot rendered by the named template (each item, for a list)
+- `{{ : Template/Name }}` — self spot: the object being rendered, rendered by the named template at the spot's column (a sub-view sharing its parent's view model); a cycle of self spots is `TMPLR009`
 - `{{# comment }}` — comment (stripped from output)
 - `\{{`, `\}}`, `\\` — escape sequences (literal delimiters / backslash)
 
-A tag that opens with `{{?`, `{{&`, or `{{>`, contains a `|`, or is not a property name optionally followed by `: TemplateName` is rejected at compile time (`TMPLR002`).
+A tag that opens with `{{?`, `{{&`, or `{{>`, contains a `|`, or is neither a property name optionally followed by `: TemplateName` nor `: TemplateName` alone is rejected at compile time (`TMPLR002`).
 
 Property names are **case-insensitive**. Whitespace-only lines whose spots all rendered empty are swallowed entire (including the trailing newline).
 
@@ -40,7 +41,7 @@ Property names are **case-insensitive**. Whitespace-only lines whose spots all r
 | Type | Location | Role |
 |------|----------|------|
 | `RendererGenerator` | `src/Templar.Generators/RendererGenerator.cs` | Incremental generator: `.tpl` AdditionalFiles + settings + compilation → `TemplateResolver.Resolve` → one source per reached template, plus diagnostics. Pipeline outputs are equatable records (`PipelineRecords.cs`: `TemplateFile`, `ProjectSettings`, `Site`, `Finding`, `TemplateOutput`; `EquatableArray<T>`), never symbols, `Compilation` or `Location`. |
-| `TemplateResolver` | `src/Templar.Generators/TemplateResolver.cs` | Declares templates by name; seeds pairs from `[Template]` types and `Compositor.ResolveTemplate` call sites (static type + constant name); binds each pair's spots to properties and chooses each write from the declared type (string → `w.Text`, primitive/enum → `w.Format`, `[Template]` type or `: T` → `w.Compose(v, …Template.Steps)`, `Sequence<T>`/`IEnumerable<T>` → `w.List`, interface/abstract → `w.Compose(v, RenderRegistry.Steps)`, referenced `[Template]` type → `RenderRegistry.Find<T>(name)`), following new pairs; emits one class per template with a `Steps` overload per type and a module initializer registering each pair and each `[Template]` default. Diagnostics `TMPLR002`–`TMPLR008` (`Descriptors.cs`, tracked in `AnalyzerReleases.Unshipped.md`). |
+| `TemplateResolver` | `src/Templar.Generators/TemplateResolver.cs` | Declares templates by name; seeds pairs from `[Template]` types and `Compositor.ResolveTemplate` call sites (static type + constant name); binds each pair's spots to properties and chooses each write from the declared type (string → `w.Text`, primitive/enum → `w.Format`, `[Template]` type or `: T` → `w.Compose(v, …Template.Steps)`, self spot `{{ : T }}` → `w.Compose(model, …Template.Steps)` for the same type, `Sequence<T>`/`IEnumerable<T>` → `w.List`, interface/abstract → `w.Compose(v, RenderRegistry.Steps)`, referenced `[Template]` type → `RenderRegistry.Find<T>(name)`), following new pairs; emits one class per template with a `Steps` overload per type and a module initializer registering each pair and each `[Template]` default. Diagnostics `TMPLR002`–`TMPLR009` (`Descriptors.cs`, tracked in `AnalyzerReleases.Unshipped.md`). |
 | `TemplateCompiler`, `TemplateLocation` | `src/Templar.Generators/` | Template validation (including the spot grammar) and parsing; template path → name under `<ProjectDir>/Templates/` (outside it: `TMPLR003`). |
 | `Compositor` | `src/Rendering/Compositor.cs` | Static entry: `ResolveTemplate<T>(T model, string template, RenderOptions? options = null)` and `ResolveTemplate<T>(T model, RenderOptions? options = null)` (by `T`'s `[Template]`, or the runtime type's for an interface/abstract `T`). |
 | `TemplateAttribute` | `src/Rendering/TemplateAttribute.cs` | `[Template("Name")]` on a class: its default template. |

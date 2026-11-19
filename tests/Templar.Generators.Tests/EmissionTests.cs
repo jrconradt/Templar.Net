@@ -46,6 +46,7 @@ public class EmissionTests
         + "groups {{ groups }}\n"
         + "badge {{ badge : Tag }} tags {{ tags : Tag }}\n"
         + "import {{ import }}\n"
+        + "self {{ : Summary }}\n"
         + "class {{ CLASS }}\\{{ escaped \\}}";
 
     private static GeneratorHarness.Run Generate()
@@ -58,6 +59,7 @@ public class EmissionTests
                                              ("/proj/Templates/Circle.tpl", "circle {{ radius }}"),
                                              ("/proj/Templates/Square.tpl", "square {{ side }}"),
                                              ("/proj/Templates/Tag.tpl", "#{{ name }}"),
+                                             ("/proj/Templates/Summary.tpl", "{{ title }} x{{ count }}"),
                                              ("/proj/Templates/Unused.tpl", "never {{ name }}"),
                                          });
     }
@@ -90,11 +92,24 @@ public class EmissionTests
     }
 
     [Fact]
+    public void A_self_spot_composes_the_model_by_the_named_template_for_the_same_type()
+    {
+        var run = Generate();
+        Assert.Empty(run.Diagnostics);
+
+        Assert.Contains("        w.Literal(\"\\nself \");\n        yield return w.Compose(model, global::App.Templates.SummaryTemplate.Steps);\n", run.Sources["Card.g.cs"]);
+        var summary = run.Sources["Summary.g.cs"];
+        Assert.Contains("Steps(global::Templar.Rendering.TemplarWriter w, global::App.Card model)", summary);
+        Assert.Contains("        w.Text(model.Title);\n        w.Literal(\" x\");\n        w.Format(model.Count);\n", summary);
+        Assert.Contains("RenderRegistry.Register<global::App.Card>(\"Summary\", Steps);", summary);
+    }
+
+    [Fact]
     public void Emitted_renderers_hold_no_conditional_and_no_loop()
     {
         var run = Generate();
         Assert.Empty(run.Diagnostics);
-        Assert.Equal(new[] { "Card.g.cs", "Circle.g.cs", "Item.g.cs", "Square.g.cs", "Tag.g.cs" },
+        Assert.Equal(new[] { "Card.g.cs", "Circle.g.cs", "Item.g.cs", "Square.g.cs", "Summary.g.cs", "Tag.g.cs" },
                      run.Sources.Keys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray());
 
         var forbidden = new[]
