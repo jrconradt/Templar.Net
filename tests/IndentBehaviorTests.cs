@@ -1,26 +1,14 @@
 using Templar.Rendering;
+using Templar.Tests.Models.Values;
 using Xunit;
 
 namespace Templar.Tests;
 
-/// <summary>
-/// IndentWriter is internal; these tests drive it through the public Template API
-/// to verify the indentation-aware substitution behavior at various depths.
-/// </summary>
 public class IndentBehaviorTests
 {
     [Fact]
-    public void NestedPlaceholder_MultiLine_AlignsToInnerColumn()
+    public void NestedSpot_MultiLine_AlignsToInnerColumn()
     {
-        var t = Template.Parse(
-            """
-            class Outer
-            {
-                {{ body }}
-            }
-            """);
-        t["body"] = "void M()\n{\n    return;\n}";
-
         var expected =
             """
             class Outer
@@ -31,65 +19,40 @@ public class IndentBehaviorTests
                 }
             }
             """;
-        Assert.Equal(expected, t.Render());
+        Assert.Equal(expected, Compositor.ResolveTemplate(new Text("void M()\n{\n    return;\n}"), "Indent/ClassBody"));
     }
 
     [Fact]
-    public void TwoNestedPlaceholders_BothAlignIndependently()
+    public void TwoNestedSpots_BothAlignIndependently()
     {
-        var t = Template.Parse(
-            """
-            {{ outer }}
-              {{ inner }}
-            """);
-        t["outer"] = "A\nB";
-        t["inner"] = "X\nY";
-
-        // outer at col 0, inner at col 2
-        var expected = "A\nB\n  X\n  Y";
-        Assert.Equal(expected, t.Render());
+        // a at col 0, b at col 2
+        Assert.Equal("A\nB\n  X\n  Y", Compositor.ResolveTemplate(new Two("A\nB", "X\nY"), "Indent/TwoColumns"));
     }
 
     [Fact]
-    public void IEnumerableStringJoinsAsMultiLine()
+    public void IEnumerableString_RendersOneItemPerLineAtTheColumn()
     {
-        var t = Template.Parse("    {{ lines }}");
-        t["lines"] = new[] { "a", "b", "c" };
-        Assert.Equal("    a\n    b\n    c", t.Render());
+        Assert.Equal("    a\n    b\n    c", Compositor.ResolveTemplate(new Lines(["a", "b", "c"]), "Values/Indented4"));
     }
 
     [Fact]
-    public void IEnumerableStringJoinUsesConfiguredNewline()
+    public void IEnumerableString_UsesConfiguredNewline()
     {
-        var t = Template.Parse("{{ lines }}")
-            .WithOptions(new RenderOptions { Newline = "\r\n" });
-        t["lines"] = new[] { "a", "b", "c" };
-        Assert.Equal("a\r\nb\r\nc", t.Render());
+        var options = new RenderOptions { Newline = "\r\n" };
+        Assert.Equal("a\r\nb\r\nc", Compositor.ResolveTemplate(new Lines(["a", "b", "c"]), "Values/X", options));
     }
 
     [Fact]
-    public void EmptyStringValue_LeavesPlaceholderEmpty_NoTrailingWhitespace()
+    public void EmptyStringValue_LeavesSpotEmpty_NoTrailingWhitespace()
     {
-        var t = Template.Parse("[{{ x }}]");
-        t["x"] = "";
-        Assert.Equal("[]", t.Render());
+        Assert.Equal("[]", Compositor.ResolveTemplate(new Text(""), "Values/Bracketed"));
     }
 
     [Fact]
     public void CrlfInValue_NormalizedToConfiguredNewline()
     {
-        var t = Template.Parse("{{ x }}");
-        t["x"] = "a\r\nb";
-        // Default newline is \n; CRLF input gets normalized through to that.
-        Assert.Equal("a\nb", t.Render());
-
-        var crlf = Template.Parse("{{ x }}")
-            .WithOptions(new RenderOptions { Newline = "\r\n" });
-        crlf["x"] = "a\r\nb";
-        Assert.Equal("a\r\nb", crlf.Render());
-
-        var loneCr = Template.Parse("{{ x }}");
-        loneCr["x"] = "a\rb";
-        Assert.Equal("a\nb", loneCr.Render());
+        Assert.Equal("a\nb", Compositor.ResolveTemplate(new Text("a\r\nb"), "Values/X"));
+        Assert.Equal("a\r\nb", Compositor.ResolveTemplate(new Text("a\r\nb"), "Values/X", new RenderOptions { Newline = "\r\n" }));
+        Assert.Equal("a\nb", Compositor.ResolveTemplate(new Text("a\rb"), "Values/X"));
     }
 }

@@ -1,5 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Compiled;
 
-public sealed class TwoLines
-{
-}
+[Template("Models/Compiled/TwoLines")]
+public sealed record TwoLines;

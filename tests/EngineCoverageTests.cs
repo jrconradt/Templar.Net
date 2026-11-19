@@ -1,5 +1,6 @@
 using Templar.Rendering;
 using Templar.Tests.Models.Engine;
+using Templar.Tests.Models.Values;
 using Xunit;
 
 namespace Templar.Tests;
@@ -7,106 +8,58 @@ namespace Templar.Tests;
 public class EngineCoverageTests
 {
     [Fact]
-    public void Mapped_type_value_at_line_start()
+    public void Template_typed_value_at_line_start()
     {
-        Assert.Equal("hi", new LitHolder { C = new Lit { V = "hi" } }.Render());
+        Assert.Equal("hi", Compositor.ResolveTemplate(new LitHolder(new Lit("hi"))));
     }
 
     [Fact]
     public void List_value_at_line_start()
     {
-        Assert.Equal("a\nb", new LitList { Items = [new Lit { V = "a" }, new Lit { V = "b" }] }.Render());
+        Assert.Equal("a\nb", Compositor.ResolveTemplate(new LitList([new Lit("a"), new Lit("b")])));
     }
 
     [Fact]
-    public void Fallback_value_renders_to_string()
+    public void Number_value_renders_invariant_text()
     {
-        var t = Template.Parse("{{ x }}");
-        t["x"] = 42;
-        Assert.Equal("42", t.Render());
+        Assert.Equal("42", Compositor.ResolveTemplate(new Number(42), "Values/X"));
     }
 
     [Fact]
     public void Multiline_value_normalizes_crlf()
     {
-        var t = Template.Parse("  {{ x }}");
-        t["x"] = "a\r\nb";
-        Assert.Equal("  a\n  b", t.Render());
+        Assert.Equal("  a\n  b", Compositor.ResolveTemplate(new Text("a\r\nb"), "Values/Indented2"));
     }
 
     [Fact]
     public void Tag_spanning_a_newline_parses_and_renders()
     {
-        var t = Template.Parse("a{{ x\n}}b");
-        t["x"] = "Z";
-        Assert.Equal("aZb", t.Render());
-    }
-
-    [Fact]
-    public void Indexer_get_returns_value_or_null()
-    {
-        var t = Template.Parse("x");
-        Assert.Null(t["missing"]);
-        t["k"] = "v";
-        Assert.Equal("v", t["k"]);
+        Assert.Equal("aZb", Compositor.ResolveTemplate(new Text("Z"), "Engine/SpanningTag"));
     }
 
     [Fact]
     public void Empty_sequence_renders_empty()
     {
-        Assert.Equal("", new LitSequence { Items = Sequence.Lines(Array.Empty<Lit>()) }.Render());
+        Assert.Equal("", Compositor.ResolveTemplate(new LitSequence(Sequence.Lines(Array.Empty<Lit>()))));
     }
 
     [Fact]
     public void Comma_list_joins_with_comma_space()
     {
-        var list = Sequence.CommaList(new[] { new Lit { V = "a" }, new Lit { V = "b" } });
-        Assert.Equal("a, b", new LitSequence { Items = list }.Render());
+        var list = Sequence.CommaList(new[] { new Lit("a"), new Lit("b") });
+        Assert.Equal("a, b", Compositor.ResolveTemplate(new LitSequence(list)));
     }
 
     [Fact]
     public void Write_only_property_is_skipped_in_binding()
     {
-        Assert.Equal("v", new WriteOnlyProp().Render());
-    }
-
-    [Fact]
-    public void Embedded_resource_loads_by_full_name()
-    {
-        var set = new TemplateSet().AddEmbeddedResource(typeof(EngineCoverageTests).Assembly,
-                                                        "Templar.Tests.Fixtures.Sample.tpl");
-        var t = set.Get("Sample");
-        t["who"] = "world";
-        Assert.Equal("hello world", t.Render());
-    }
-
-    [Fact]
-    public void Embedded_templates_load_by_prefix()
-    {
-        var set = new TemplateSet().AddEmbeddedTemplates(typeof(EngineCoverageTests).Assembly,
-                                                         "Templar.Tests.Fixtures.");
-        Assert.True(set.Contains("Sample"));
-    }
-
-    [Fact]
-    public void Embedded_resource_with_single_dot_name()
-    {
-        var set = new TemplateSet().AddEmbeddedResource(typeof(EngineCoverageTests).Assembly, "Solo.tpl");
-        var t = set.Get("Solo");
-        t["x"] = "k";
-        Assert.Equal("solo k", t.Render());
-    }
-
-    [Fact]
-    public void Literal_carriage_return_in_source_is_dropped()
-    {
-        Assert.Equal("a\nb", Template.Parse("a\r\nb").Render());
+        Assert.Equal("v", Compositor.ResolveTemplate(new WriteOnlyProp()));
     }
 
     [Fact]
     public void Blank_lines_sequence_joins_with_blank_line()
     {
-        var list = Sequence.BlankLines(new[] { new Lit { V = "a" }, new Lit { V = "b" } });
-        Assert.Equal("a\n\nb", new LitSequence { Items = list }.Render());
+        var list = Sequence.BlankLines(new[] { new Lit("a"), new Lit("b") });
+        Assert.Equal("a\n\nb", Compositor.ResolveTemplate(new LitSequence(list)));
     }
 }

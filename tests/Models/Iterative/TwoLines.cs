@@ -1,5 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Iterative;
 
-public sealed class TwoLines
-{
-}
+[Template("Models/Iterative/TwoLines")]
+public sealed record TwoLines;

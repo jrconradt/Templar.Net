@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Engine;
 
-public sealed class LitHolder
-{
-    public required Lit C { get; init; }
-}
+[Template("Models/Engine/LitHolder")]
+public sealed record LitHolder(Lit C);

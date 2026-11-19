@@ -1,6 +1,9 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Engine;
 
-public sealed class WriteOnlyProp
+[Template("Models/Engine/WriteOnlyProp")]
+public sealed record WriteOnlyProp
 {
     private string _w = "";
 

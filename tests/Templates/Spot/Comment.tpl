@@ -1,0 +1,1 @@
+before{{# this is a comment }}after

@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Swallow;
 
-public sealed class TypeHost
-{
-    public required Empty Inner { get; init; }
-}
+[Template("Models/Swallow/TypeHost")]
+public sealed record TypeHost(Empty Inner);

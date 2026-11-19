@@ -8,7 +8,7 @@ namespace Templar.Generators.Tests;
 
 public class IncrementalTests
 {
-    private const string Source = "namespace App; public sealed class Card { public required string Who { get; init; } }";
+    private const string Source = "namespace App; [Templar.Rendering.Template(\"Card\")] public sealed class Card { public required string Who { get; init; } }";
 
     [Fact]
     public void Unrelated_edit_leaves_the_generated_output_cached()

@@ -1,5 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Writer;
 
-public sealed class Inner
-{
-}
+[Template("Models/Writer/Inner")]
+public sealed record Inner;

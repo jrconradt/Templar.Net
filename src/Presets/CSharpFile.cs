@@ -1,6 +1,7 @@
 namespace Templar.Presets;
 using Templar.Rendering;
 
+[Template("Presets/CSharpFile")]
 public sealed class CSharpFile
 {
     public string Namespace { get; init; } = "";

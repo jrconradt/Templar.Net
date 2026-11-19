@@ -2,7 +2,5 @@ using Templar.Rendering;
 
 namespace Templar.Tests.Models.Swallow;
 
-public sealed class ListHost
-{
-    public required Sequence<Empty> Inner { get; init; }
-}
+[Template("Models/Swallow/ListHost")]
+public sealed record ListHost(Sequence<Empty> Inner);

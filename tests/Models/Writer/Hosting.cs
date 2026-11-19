@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Writer;
 
-public sealed class Hosting
-{
-    public required Inner Child { get; init; }
-}
+[Template("Models/Writer/Hosting")]
+public sealed record Hosting(Inner Child);

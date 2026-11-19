@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Engine;
 
-public sealed class Lit
-{
-    public string V { get; init; } = "";
-}
+[Template("Models/Engine/Lit")]
+public sealed record Lit(string V);

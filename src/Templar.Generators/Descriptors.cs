@@ -6,66 +6,66 @@ internal static class Descriptors
 {
     public static readonly DiagnosticDescriptor MalformedTemplate = new(
         id: "TMPLR002",
-        title: "Malformed .tpl template",
+        title: "Malformed template",
         messageFormat: "{0}",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The .tpl file has an unclosed tag or an unsupported tag marker and cannot be compiled.");
+        description: "The .tpl file has an unclosed tag, an unsupported tag marker, or a spot that is not a property name optionally followed by ': TemplateName'.");
 
     public static readonly DiagnosticDescriptor OutsideTemplates = new(
         id: "TMPLR003",
         title: "Template outside the Templates folder",
-        messageFormat: "Template '{0}' is outside the Templates folder '{1}', so no type can be resolved for it",
+        messageFormat: "Template '{0}' is outside the Templates folder '{1}', so it has no name",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Templates live under <ProjectDir>/Templates/: a .tpl's path after Templates/ is its type's namespace path below RootNamespace. A .tpl outside Templates/ has no namespace path.");
+        description: "Templates live under <ProjectDir>/Templates/: a template's name is its path after Templates/ without .tpl. A .tpl outside Templates/ has no name.");
 
-    public static readonly DiagnosticDescriptor NoType = new(
+    public static readonly DiagnosticDescriptor NoTemplate = new(
         id: "TMPLR004",
-        title: "Template with no type",
-        messageFormat: "Template '{0}' maps to type '{1}', which is not declared in this project",
+        title: "No such template",
+        messageFormat: "{0} names template '{1}', which is not declared under Templates/",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A .tpl under Templates/ is the template of the type named RootNamespace + its folder path after Templates/ + its file name; declare that type in the project.");
+        description: "A [Template] attribute, a ResolveTemplate call or a ': TemplateName' spot names a template, and that name is searched only among the .tpl files under this project's Templates/ folder.");
 
-    public static readonly DiagnosticDescriptor TypeShape = new(
+    public static readonly DiagnosticDescriptor NotConstant = new(
         id: "TMPLR005",
-        title: "Template type is not a sealed, non-generic, top-level class",
-        messageFormat: "Type '{0}' of template '{1}' must be a sealed, non-generic, top-level class or record: {2}",
+        title: "Template name is not a constant",
+        messageFormat: "The template name passed to ResolveTemplate is not a constant",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A type with a template is a sealed, non-generic, top-level class or record.");
+        description: "Templates are resolved at compile time, so the template a ResolveTemplate call names must be a constant string.");
 
     public static readonly DiagnosticDescriptor NoProperty = new(
         id: "TMPLR006",
-        title: "Hole with no property",
-        messageFormat: "Hole '{0}' in template '{1}' matches no readable instance property of '{2}'",
+        title: "Spot with no property",
+        messageFormat: "Spot '{0}' at line {1} of template '{2}' names no readable property of '{3}'",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Each hole names an accessible, readable instance property of the template's type, matched case-insensitively.");
+        description: "Each spot names an accessible, readable instance property of the type rendered by the template, matched case-insensitively.");
 
     public static readonly DiagnosticDescriptor AmbiguousProperty = new(
         id: "TMPLR007",
-        title: "Hole matches more than one property",
-        messageFormat: "Hole '{0}' in template '{1}' matches more than one property of '{2}': {3}",
+        title: "Spot matches more than one property",
+        messageFormat: "Spot '{0}' at line {1} of template '{2}' matches more than one property of '{3}': {4}",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Holes match properties case-insensitively; two properties differing only in case cannot both be holes.");
+        description: "Spots match properties case-insensitively; a type with two properties differing only in case cannot fill a spot naming them.");
 
     public static readonly DiagnosticDescriptor CannotRender = new(
         id: "TMPLR008",
-        title: "Hole whose type cannot render",
-        messageFormat: "Hole '{0}' in template '{1}' is property '{2}' of type '{3}', which cannot render: {4}",
+        title: "Type cannot render",
+        messageFormat: "Type '{0}' cannot render {1}: {2}",
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A hole's type is a string, a primitive, an enum, a type with a template, a Sequence<T> or IEnumerable<T> of one of these, or an interface whose implementations all have templates.");
+        description: "A value renders as text (string, primitive, enum), by a template (a ': TemplateName' spot, or its type's [Template]), as a list (Sequence<T>, IEnumerable<T>), or by its runtime type's [Template] (an interface or abstract class whose implementations all carry one).");
 
     public static DiagnosticDescriptor ById(string id)
     {
@@ -73,8 +73,8 @@ internal static class Descriptors
         {
             "TMPLR002" => MalformedTemplate,
             "TMPLR003" => OutsideTemplates,
-            "TMPLR004" => NoType,
-            "TMPLR005" => TypeShape,
+            "TMPLR004" => NoTemplate,
+            "TMPLR005" => NotConstant,
             "TMPLR006" => NoProperty,
             "TMPLR007" => AmbiguousProperty,
             "TMPLR008" => CannotRender,

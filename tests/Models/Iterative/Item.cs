@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Iterative;
 
-public sealed class Item
-{
-    public string Name { get; init; } = "";
-}
+[Template("Models/Iterative/Item")]
+public sealed record Item(string Name);

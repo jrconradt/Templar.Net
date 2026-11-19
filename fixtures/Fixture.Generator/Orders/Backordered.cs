@@ -1,8 +1,6 @@
+using Templar.Rendering;
+
 namespace Fixture.Generator.Orders;
 
-public sealed class Backordered : ILine
-{
-    public required string Sku { get; init; }
-
-    public required string Eta { get; init; }
-}
+[Template("Orders/Backordered")]
+public sealed record Backordered(string Sku, string Eta) : ILine;

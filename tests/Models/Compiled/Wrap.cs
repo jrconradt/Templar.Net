@@ -1,8 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Compiled;
 
-public sealed class Wrap
-{
-    public Wrap? Inside { get; init; }
-
-    public string Leaf { get; init; } = "";
-}
+[Template("Models/Compiled/Wrap")]
+public sealed record Wrap(Wrap? Inside, string Leaf = "");
