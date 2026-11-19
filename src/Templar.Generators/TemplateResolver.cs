@@ -1,50 +1,80 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Templar.Generators;
 
-internal static class TemplateResolver
+internal sealed class TemplateResolver
 {
     private const string Writer = "global::Templar.Rendering.TemplarWriter";
     private const string Registry = "global::Templar.Rendering.RenderRegistry";
+    private const string AttributeName = "Templar.Rendering.TemplateAttribute";
+    private const string CannotCompose = "it is not a string, primitive, enum, Sequence<T>, IEnumerable<T>, interface, abstract class or type with [Template]; name a template with ': TemplateName'";
 
-    private static readonly SymbolDisplayFormat DottedName = new(
-        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-        genericsOptions: SymbolDisplayGenericsOptions.None);
-
-    private sealed class Candidate
+    private sealed class Declared
     {
-        public Candidate(TemplateFile file, INamedTypeSymbol type, List<TemplateCompiler.Node> nodes)
+        public Declared(string name, string path, List<TemplateCompiler.Node> nodes, string rootNamespace)
         {
-            File = file;
-            Type = type;
+            Name = name;
+            Path = path;
             Nodes = nodes;
+            var segments = name.Split('/').Select(Identifier.Sanitize).ToList();
+            Namespace = string.Join(".",
+                                    rootNamespace.Split('.')
+                                        .Select(s => Identifier.Escape(Identifier.Sanitize(s)))
+                                        .Concat(new[] { "Templates" })
+                                        .Concat(segments.Take(segments.Count - 1).Select(Identifier.Escape)));
+            ClassName = segments[segments.Count - 1] + "Template";
+            HintName = string.Join(".", segments) + ".g.cs";
         }
 
-        public TemplateFile File { get; }
-        public INamedTypeSymbol Type { get; }
+        public string Name { get; }
+        public string Path { get; }
         public List<TemplateCompiler.Node> Nodes { get; }
+        public string Namespace { get; }
+        public string ClassName { get; }
+        public string HintName { get; }
+        public string Steps => $"global::{Namespace}.{ClassName}.Steps";
     }
 
-    private sealed class Context
+    private sealed class Pair
     {
-        public Context(Compilation compilation, Dictionary<INamedTypeSymbol, Candidate> mapped)
+        public Pair(ITypeSymbol type, Declared template, Site origin)
         {
-            Compilation = compilation;
-            Mapped = mapped;
-            Sequence = compilation.GetTypeByMetadataName("Templar.Rendering.Sequence`1");
-            SourceTypes = new Lazy<List<INamedTypeSymbol>>(() => AllSourceTypes(compilation));
+            Type = type;
+            Template = template;
+            Origin = origin;
         }
 
-        public Compilation Compilation { get; }
-        public Dictionary<INamedTypeSymbol, Candidate> Mapped { get; }
-        public INamedTypeSymbol? Sequence { get; }
-        public Lazy<List<INamedTypeSymbol>> SourceTypes { get; }
+        public ITypeSymbol Type { get; }
+        public Declared Template { get; }
+        public Site Origin { get; }
+        public bool Default { get; set; }
+        public StringBuilder Body { get; } = new();
+    }
+
+    private readonly Compilation _compilation;
+    private readonly string _rootNamespace;
+    private readonly CancellationToken _ct;
+    private readonly INamedTypeSymbol? _sequence;
+    private readonly Dictionary<string, Declared> _templates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Pair> _pairs = new(StringComparer.Ordinal);
+    private readonly Queue<Pair> _pending = new();
+    private readonly List<Finding> _findings = new();
+    private List<INamedTypeSymbol>? _sourceTypes;
+
+    private TemplateResolver(Compilation compilation, string rootNamespace, CancellationToken ct)
+    {
+        _compilation = compilation;
+        _rootNamespace = rootNamespace;
+        _ct = ct;
+        _sequence = compilation.GetTypeByMetadataName("Templar.Rendering.Sequence`1");
     }
 
     public static ImmutableArray<TemplateOutput> Resolve(ImmutableArray<TemplateFile> files,
@@ -57,180 +87,246 @@ internal static class TemplateResolver
             return ImmutableArray<TemplateOutput>.Empty;
         }
 
-        var outputs = ImmutableArray.CreateBuilder<TemplateOutput>();
-        var mapped = new Dictionary<INamedTypeSymbol, Candidate>(SymbolEqualityComparer.Default);
-        var context = new Context(compilation, mapped);
-
-        foreach (var file in files.OrderBy(f => f.Path, StringComparer.Ordinal))
+        var resolver = new TemplateResolver(compilation, settings.RootNamespace!, ct);
+        resolver.Declare(files, settings.ProjectDir!);
+        resolver.SeedTypes();
+        resolver.SeedCallSites();
+        while (resolver._pending.Count > 0)
         {
             ct.ThrowIfCancellationRequested();
+            resolver.Bind(resolver._pending.Dequeue());
+        }
+        return resolver.Outputs();
+    }
 
-            var location = TemplateLocation.From(file.Path, settings.ProjectDir!);
-            if (location is null)
+    private void Declare(ImmutableArray<TemplateFile> files, string projectDir)
+    {
+        foreach (var file in files.OrderBy(f => f.Path, StringComparer.Ordinal))
+        {
+            _ct.ThrowIfCancellationRequested();
+
+            var name = TemplateLocation.NameOf(file.Path, projectDir);
+            if (name is null)
             {
-                outputs.Add(Failed(file, "TMPLR003", 1, file.Path, TemplateLocation.Root(settings.ProjectDir!)));
+                Report("TMPLR003", Site.Line(file.Path, 1), file.Path, TemplateLocation.Root(projectDir));
                 continue;
             }
 
             var error = TemplateCompiler.Validate(file.Text);
             if (error is not null)
             {
-                outputs.Add(Failed(file, "TMPLR002", error.Value.Line, error.Value.Message));
+                Report("TMPLR002", Site.Line(file.Path, error.Value.Line), error.Value.Message);
                 continue;
             }
 
-            var fullName = string.Join(".",
-                                       new[] { settings.RootNamespace! }
-                                           .Concat(location.FolderSegments.Select(Identifier.Sanitize))
-                                           .Concat(new[] { Identifier.Sanitize(location.LeafName) }));
+            _templates[name] = new Declared(name, file.Path, TemplateCompiler.Parse(file.Text), _rootNamespace);
+        }
 
-            var type = compilation.Assembly.GetTypeByMetadataName(fullName);
-            if (type is null)
+        foreach (var declared in _templates.Values.OrderBy(d => d.Name, StringComparer.Ordinal))
+        {
+            foreach (var node in declared.Nodes)
             {
-                var nearMiss = context.SourceTypes.Value
-                    .FirstOrDefault(t => t.ToDisplayString(DottedName) == fullName);
-                if (nearMiss is null)
+                if (node.Op == TemplateCompiler.Op.Val && node.Template is not null && !_templates.ContainsKey(node.Template))
                 {
-                    outputs.Add(Failed(file, "TMPLR004", 1, file.Path, fullName));
+                    Report("TMPLR004",
+                           Site.Line(declared.Path, node.Line),
+                           $"Spot '{node.Text}' at line {node.Line.ToString(CultureInfo.InvariantCulture)} of template '{declared.Name}'",
+                           node.Template);
+                }
+            }
+        }
+    }
+
+    private void SeedTypes()
+    {
+        foreach (var type in SourceTypes())
+        {
+            var attribute = AttributeOf(type);
+            if (attribute is null)
+            {
+                continue;
+            }
+
+            var site = attribute.ApplicationSyntaxReference is { } reference
+                ? Site.Of(reference.GetSyntax(_ct).GetLocation())
+                : Site.Of(type.Locations[0]);
+            var name = NameIn(attribute);
+            if (name is null || !_templates.TryGetValue(name, out var declared))
+            {
+                Report("TMPLR004", site, $"[Template] on '{type.ToDisplayString()}'", name ?? "");
+                continue;
+            }
+
+            var problem = HostProblem(type);
+            if (problem is not null)
+            {
+                Report("TMPLR008", site, type.ToDisplayString(), "by its [Template]", problem);
+                continue;
+            }
+
+            Reach(type, declared, site).Default = true;
+        }
+    }
+
+    private void SeedCallSites()
+    {
+        var compositor = _compilation.GetTypeByMetadataName("Templar.Rendering.Compositor");
+        if (compositor is null)
+        {
+            return;
+        }
+
+        foreach (var tree in _compilation.SyntaxTrees)
+        {
+            _ct.ThrowIfCancellationRequested();
+            SemanticModel? model = null;
+            foreach (var invocation in tree.GetRoot(_ct).DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                if (CalledName(invocation.Expression) != "ResolveTemplate")
+                {
                     continue;
                 }
-                var reason = nearMiss.ContainingType is not null
-                    ? $"it is nested in '{nearMiss.ContainingType.ToDisplayString()}'"
-                    : "it is generic";
-                outputs.Add(Failed(file, "TMPLR005", 1, nearMiss.ToDisplayString(), file.Path, reason));
-                continue;
+                model ??= _compilation.GetSemanticModel(tree);
+                if (model.GetSymbolInfo(invocation, _ct).Symbol is not IMethodSymbol method
+                    || !SymbolEqualityComparer.Default.Equals(method.ContainingType, compositor)
+                    || method.TypeArguments.Length != 1)
+                {
+                    continue;
+                }
+                SeedCallSite(invocation, method, model);
             }
+        }
+    }
 
-            var shape = ShapeProblem(type);
-            if (shape is null && mapped.TryGetValue(type, out var earlier))
+    private void SeedCallSite(InvocationExpressionSyntax invocation, IMethodSymbol method, SemanticModel model)
+    {
+        var type = method.TypeArguments[0];
+        if (type.TypeKind == TypeKind.Error)
+        {
+            return;
+        }
+        var site = Site.Of(invocation.GetLocation());
+
+        var parameter = method.Parameters.FirstOrDefault(p => p.Name == "template");
+        if (parameter is null)
+        {
+            string? reason = "it has no [Template]";
+            if (TemplateOf(type) is not null || (IsVariant(type) && !TryElement(type, out _, out _)))
             {
-                shape = $"it is already the type of template '{earlier.File.Path}'";
+                ComposeSteps(type, out reason);
             }
-            if (shape is not null)
+            if (reason is not null)
             {
-                outputs.Add(Failed(file, "TMPLR005", 1, type.ToDisplayString(), file.Path, shape));
-                continue;
+                Report("TMPLR008", site, type.ToDisplayString(), "as the model of ResolveTemplate", reason);
             }
-
-            mapped[type] = new Candidate(file, type, TemplateCompiler.Parse(file.Text));
+            return;
         }
 
-        foreach (var candidate in mapped.Values.OrderBy(c => c.File.Path, StringComparer.Ordinal))
+        var argument = ArgumentFor(invocation, parameter);
+        if (argument is null)
         {
-            ct.ThrowIfCancellationRequested();
-            outputs.Add(Emit(candidate, context));
+            return;
+        }
+        var constant = model.GetConstantValue(argument.Expression, _ct);
+        if (!constant.HasValue || constant.Value is not string name)
+        {
+            Report("TMPLR005", Site.Of(argument.GetLocation()));
+            return;
+        }
+        if (!_templates.TryGetValue(name, out var declared))
+        {
+            Report("TMPLR004", Site.Of(argument.GetLocation()), "ResolveTemplate", name);
+            return;
         }
 
-        return outputs.ToImmutable();
+        var problem = HostProblem(type);
+        if (problem is not null)
+        {
+            Report("TMPLR008", site, type.ToDisplayString(), "as the model of ResolveTemplate", problem);
+            return;
+        }
+
+        Reach(type, declared, site);
     }
 
-    private static string? ShapeProblem(INamedTypeSymbol type)
+    private void Bind(Pair pair)
     {
-        if (type.TypeKind != TypeKind.Class)
-        {
-            return "it is not a class or record";
-        }
-        if (type.IsStatic)
-        {
-            return "it is static";
-        }
-        if (!type.IsSealed)
-        {
-            return "it is not sealed";
-        }
-        if (type.IsFileLocal)
-        {
-            return "it is file-local";
-        }
-        return null;
-    }
+        var properties = ReadableProperties(pair.Type);
+        var template = pair.Template;
 
-    private static TemplateOutput Failed(TemplateFile file, string id, int line, params string[] arguments)
-    {
-        var finding = new Finding(id, file.Path, line, new EquatableArray<string>(arguments));
-        return new TemplateOutput("", "", new EquatableArray<Finding>(new[] { finding }));
-    }
-
-    private static TemplateOutput Emit(Candidate candidate, Context context)
-    {
-        var type = candidate.Type;
-        var file = candidate.File;
-        var properties = ReadableProperties(type, context.Compilation);
-        var findings = new List<Finding>();
-        var body = new StringBuilder();
-
-        foreach (var node in candidate.Nodes)
+        foreach (var node in template.Nodes)
         {
             if (node.Op == TemplateCompiler.Op.Lit)
             {
-                body.Append("        w.Literal(\"").Append(TemplateCompiler.EscapeLiteral(node.Text)).Append("\");\n");
+                pair.Body.Append("        w.Literal(\"").Append(TemplateCompiler.EscapeLiteral(node.Text)).Append("\");\n");
                 continue;
             }
 
+            var line = node.Line.ToString(CultureInfo.InvariantCulture);
             var matches = properties
                 .Where(p => string.Equals(p.Name, node.Text, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (matches.Count == 0)
             {
-                findings.Add(new Finding("TMPLR006",
-                                         file.Path,
-                                         node.Line,
-                                         new EquatableArray<string>(new[] { node.Text, file.Path, type.ToDisplayString() })));
+                Report("TMPLR006", pair.Origin, node.Text, line, template.Name, pair.Type.ToDisplayString());
                 continue;
             }
             if (matches.Count > 1)
             {
-                findings.Add(new Finding("TMPLR007",
-                                         file.Path,
-                                         node.Line,
-                                         new EquatableArray<string>(new[] { node.Text, file.Path, type.ToDisplayString(), string.Join(", ", matches.Select(p => p.Name)) })));
+                Report("TMPLR007", pair.Origin, node.Text, line, template.Name, pair.Type.ToDisplayString(), string.Join(", ", matches.Select(p => p.Name)));
                 continue;
             }
 
             var property = matches[0];
             var access = "model." + Identifier.Escape(property.Name);
-            var write = HoleWrite(property.Type, access, context, out var reason);
+            var write = SpotWrite(property.Type, node.Template, access, Site.Line(template.Path, node.Line), out var reason);
             if (write is null)
             {
-                findings.Add(new Finding("TMPLR008",
-                                         file.Path,
-                                         node.Line,
-                                         new EquatableArray<string>(new[] { node.Text, file.Path, property.Name, property.Type.ToDisplayString(), reason })));
+                if (reason is not null)
+                {
+                    Report("TMPLR008",
+                           pair.Origin,
+                           property.Type.ToDisplayString(),
+                           $"at spot '{node.Text}' (line {line} of template '{template.Name}', property '{property.Name}')",
+                           reason);
+                }
                 continue;
             }
-            body.Append("        ").Append(write).Append('\n');
+            pair.Body.Append("        ").Append(write).Append('\n');
         }
-
-        var typeName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        var accessibility = type.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
-        var source = "// <auto-generated/>\n"
-            + "#nullable enable\n\n"
-            + $"namespace {type.ContainingNamespace.ToDisplayString()};\n\n"
-            + $"{accessibility} static class {type.Name}Renderer\n"
-            + "{\n"
-            + $"    public static string Render(this {typeName} model, global::Templar.Rendering.RenderOptions? options = null)\n"
-            + "    {\n"
-            + $"        return {Writer}.Render(model, Steps, options);\n"
-            + "    }\n\n"
-            + $"    internal static global::System.Collections.Generic.IEnumerator<object?> Steps({Writer} w, {typeName} model)\n"
-            + "    {\n"
-            + body
-            + "        yield break;\n"
-            + "    }\n\n"
-            + "    [global::System.Runtime.CompilerServices.ModuleInitializer]\n"
-            + "    internal static void Register()\n"
-            + "    {\n"
-            + $"        {Registry}.Register<{typeName}>(Steps);\n"
-            + "    }\n"
-            + "}\n";
-
-        var hintName = type.ToDisplayString() + ".g.cs";
-        return new TemplateOutput(hintName, source, new EquatableArray<Finding>(findings));
     }
 
-    private static string? HoleWrite(ITypeSymbol type, string access, Context context, out string reason)
+    private string? SpotWrite(ITypeSymbol type, string? over, string access, Site spot, out string? reason)
     {
-        reason = "";
+        reason = null;
+        if (type.TypeKind == TypeKind.Error)
+        {
+            return null;
+        }
+
+        if (over is not null)
+        {
+            if (!_templates.TryGetValue(over, out var declared))
+            {
+                return null;
+            }
+            if (type.SpecialType != SpecialType.System_String && TryElement(type, out var overElement, out reason))
+            {
+                var overItem = ItemSteps(overElement!, over, spot, 1, out reason);
+                return overItem is null ? null : $"yield return w.List({access}, {overItem});";
+            }
+            if (reason is not null)
+            {
+                return null;
+            }
+            reason = HostProblem(type);
+            if (reason is not null)
+            {
+                return null;
+            }
+            return $"yield return w.Compose({access}, {Reach(type, declared, spot).Template.Steps});";
+        }
+
         if (type.SpecialType == SpecialType.System_String)
         {
             return $"w.Text({access});";
@@ -239,83 +335,335 @@ internal static class TemplateResolver
         {
             return $"w.Format({access});";
         }
-        if (type is INamedTypeSymbol named && context.Mapped.ContainsKey(named))
+        if (TemplateOf(type) is null)
         {
-            return $"yield return w.Compose({access}, {RendererOf(named)}.Steps);";
-        }
-        if (TryElement(type, context, out var element, out reason))
-        {
-            var item = ItemSteps(element!, context, 1, out reason);
-            if (item is null)
+            if (TryElement(type, out var element, out reason))
+            {
+                var item = ItemSteps(element!, null, spot, 1, out reason);
+                return item is null ? null : $"yield return w.List({access}, {item});";
+            }
+            if (reason is not null)
             {
                 return null;
             }
-            return $"yield return w.List({access}, {item});";
+            if (!IsVariant(type))
+            {
+                reason = CannotCompose;
+                return null;
+            }
         }
-        if (reason.Length > 0)
+
+        var steps = ComposeSteps(type, out reason);
+        return steps is null ? null : $"yield return w.Compose({access}, {steps});";
+    }
+
+    private string? ItemSteps(ITypeSymbol element, string? over, Site spot, int depth, out string? reason)
+    {
+        reason = null;
+        if (element.TypeKind == TypeKind.Error)
         {
             return null;
         }
-        if (type.TypeKind == TypeKind.Interface)
-        {
-            if (!AllImplementationsMapped(type, context, out reason))
-            {
-                return null;
-            }
-            return $"yield return w.Compose({access}, {Registry}.Steps);";
-        }
-        reason = "it is not a string, primitive, enum, type with a template, Sequence<T>, IEnumerable<T> or interface";
-        return null;
-    }
 
-    private static string? ItemSteps(ITypeSymbol element, Context context, int depth, out string reason)
-    {
-        reason = "";
-        if (element.SpecialType == SpecialType.System_String)
+        if (over is null && element.SpecialType == SpecialType.System_String)
         {
             return $"{Writer}.TextItem";
         }
-        if (IsScalar(element))
+        if (over is null && IsScalar(element))
         {
-            return $"{Writer}.FormatItem<{element.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}>";
+            return $"{Writer}.FormatItem<{Qualified(element)}>";
         }
-        if (element is INamedTypeSymbol named && context.Mapped.ContainsKey(named))
+        if ((over is not null || TemplateOf(element) is null) && element.SpecialType != SpecialType.System_String)
         {
-            return $"{RendererOf(named)}.Steps";
-        }
-        if (TryElement(element, context, out var inner, out reason))
-        {
-            var innerSteps = ItemSteps(inner!, context, depth + 1, out reason);
-            if (innerSteps is null)
+            if (TryElement(element, out var inner, out reason))
             {
-                return null;
+                var innerSteps = ItemSteps(inner!, over, spot, depth + 1, out reason);
+                if (innerSteps is null)
+                {
+                    return null;
+                }
+                return $"(w{depth}, m{depth}) => {Writer}.ListItem(w{depth}, m{depth}, {innerSteps})";
             }
-            return $"(w{depth}, m{depth}) => {Writer}.ListItem(w{depth}, m{depth}, {innerSteps})";
-        }
-        if (reason.Length > 0)
-        {
-            reason = $"its items cannot render: {reason}";
-            return null;
-        }
-        if (element.TypeKind == TypeKind.Interface)
-        {
-            if (!AllImplementationsMapped(element, context, out reason))
+            if (reason is not null)
             {
                 reason = $"its items cannot render: {reason}";
                 return null;
             }
+        }
+
+        if (over is not null)
+        {
+            reason = HostProblem(element);
+            if (reason is not null)
+            {
+                reason = $"its items of type '{element.ToDisplayString()}' cannot render by template '{over}': {reason}";
+                return null;
+            }
+            return Reach(element, _templates[over], spot).Template.Steps;
+        }
+
+        if (TemplateOf(element) is null && !IsVariant(element))
+        {
+            reason = $"its items of type '{element.ToDisplayString()}' cannot render: {CannotCompose}";
+            return null;
+        }
+        var steps = ComposeSteps(element, out reason);
+        if (steps is null && reason is not null)
+        {
+            reason = $"its items cannot render: {reason}";
+        }
+        return steps;
+    }
+
+    private string? ComposeSteps(ITypeSymbol type, out string? reason)
+    {
+        reason = null;
+        var name = TemplateOf(type);
+        if (name is not null)
+        {
+            if (SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly))
+            {
+                return _pairs.TryGetValue(Key(type, name), out var pair) ? pair.Template.Steps : null;
+            }
+            reason = HostProblem(type);
+            if (reason is not null)
+            {
+                return null;
+            }
+            return $"{Registry}.Find<{Qualified(type)}>(\"{TemplateCompiler.EscapeLiteral(name)}\")";
+        }
+
+        if (IsVariant(type))
+        {
+            foreach (var candidate in SourceTypes())
+            {
+                if (candidate.TypeKind == TypeKind.Interface || candidate.IsAbstract || candidate.IsStatic || !Implements(candidate, type))
+                {
+                    continue;
+                }
+                if (TemplateOf(candidate) is null)
+                {
+                    reason = $"its implementation '{candidate.ToDisplayString()}' has no [Template]";
+                    return null;
+                }
+            }
             return $"{Registry}.Steps";
         }
-        reason = $"its items of type '{element.ToDisplayString()}' are not a string, primitive, enum, type with a template, Sequence<T>, IEnumerable<T> or interface";
+
+        reason = "it has no [Template]";
         return null;
     }
 
-    private static bool TryElement(ITypeSymbol type, Context context, out ITypeSymbol? element, out string reason)
+    private Pair Reach(ITypeSymbol type, Declared template, Site origin)
+    {
+        type = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        var key = Key(type, template.Name);
+        if (!_pairs.TryGetValue(key, out var pair))
+        {
+            pair = new Pair(type, template, origin);
+            _pairs[key] = pair;
+            _pending.Enqueue(pair);
+        }
+        return pair;
+    }
+
+    private ImmutableArray<TemplateOutput> Outputs()
+    {
+        var outputs = ImmutableArray.CreateBuilder<TemplateOutput>();
+        var none = new EquatableArray<Finding>(Array.Empty<Finding>());
+        foreach (var group in _pairs.Values.GroupBy(p => p.Template).OrderBy(g => g.Key.Name, StringComparer.Ordinal))
+        {
+            var pairs = group.OrderBy(p => Qualified(p.Type), StringComparer.Ordinal).ToList();
+            outputs.Add(new TemplateOutput(group.Key.HintName, Emit(group.Key, pairs), none));
+        }
+        if (_findings.Count > 0)
+        {
+            outputs.Add(new TemplateOutput("", "", new EquatableArray<Finding>(_findings)));
+        }
+        return outputs.ToImmutable();
+    }
+
+    private static string Emit(Declared template, List<Pair> pairs)
+    {
+        var name = TemplateCompiler.EscapeLiteral(template.Name);
+        var source = new StringBuilder();
+        source.Append("// <auto-generated/>\n")
+              .Append("#nullable enable\n\n")
+              .Append("namespace ").Append(template.Namespace).Append(";\n\n")
+              .Append("internal static class ").Append(template.ClassName).Append('\n')
+              .Append("{\n");
+        foreach (var pair in pairs)
+        {
+            source.Append("    internal static global::System.Collections.Generic.IEnumerator<object?> Steps(")
+                  .Append(Writer).Append(" w, ").Append(Qualified(pair.Type)).Append(" model)\n")
+                  .Append("    {\n")
+                  .Append(pair.Body)
+                  .Append("        yield break;\n")
+                  .Append("    }\n\n");
+        }
+        source.Append("    [global::System.Runtime.CompilerServices.ModuleInitializer]\n")
+              .Append("    internal static void Register()\n")
+              .Append("    {\n");
+        foreach (var pair in pairs)
+        {
+            source.Append("        ").Append(Registry).Append(".Register<").Append(Qualified(pair.Type))
+                  .Append(">(\"").Append(name).Append("\", Steps);\n");
+            if (pair.Default)
+            {
+                source.Append("        ").Append(Registry).Append(".RegisterDefault<").Append(Qualified(pair.Type))
+                      .Append(">(\"").Append(name).Append("\");\n");
+            }
+        }
+        source.Append("    }\n")
+              .Append("}\n");
+        return source.ToString();
+    }
+
+    private void Report(string id, Site site, params string[] arguments)
+    {
+        _findings.Add(new Finding(id, site, new EquatableArray<string>(arguments)));
+    }
+
+    private string? HostProblem(ITypeSymbol type)
+    {
+        if (type.TypeKind == TypeKind.TypeParameter)
+        {
+            return "it is a type parameter";
+        }
+        if (type.IsValueType)
+        {
+            return "it is a value type";
+        }
+        if (type is not INamedTypeSymbol named)
+        {
+            return "it is not a class, record or interface";
+        }
+        if (named.IsAnonymousType)
+        {
+            return "it is anonymous";
+        }
+        if (IsOpen(named))
+        {
+            return "it is generic";
+        }
+        if (!_compilation.IsSymbolAccessibleWithin(named, _compilation.Assembly))
+        {
+            return "it is not accessible to generated code";
+        }
+        return null;
+    }
+
+    private static bool IsOpen(ITypeSymbol type)
+    {
+        if (type is ITypeParameterSymbol)
+        {
+            return true;
+        }
+        if (type is IArrayTypeSymbol array)
+        {
+            return IsOpen(array.ElementType);
+        }
+        if (type is INamedTypeSymbol named)
+        {
+            return named.TypeArguments.Any(IsOpen) || (named.ContainingType is not null && IsOpen(named.ContainingType));
+        }
+        return false;
+    }
+
+    private static bool IsVariant(ITypeSymbol type)
+    {
+        return type.TypeKind == TypeKind.Interface || (type.TypeKind == TypeKind.Class && type.IsAbstract);
+    }
+
+    private static bool Implements(INamedTypeSymbol candidate, ITypeSymbol type)
+    {
+        if (type.TypeKind == TypeKind.Interface)
+        {
+            return candidate.AllInterfaces.Contains((INamedTypeSymbol)type, SymbolEqualityComparer.Default);
+        }
+        for (var current = candidate.BaseType; current is not null; current = current.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current, type))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static AttributeData? AttributeOf(ITypeSymbol type)
+    {
+        foreach (var attribute in type.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() == AttributeName)
+            {
+                return attribute;
+            }
+        }
+        return null;
+    }
+
+    private static string? NameIn(AttributeData attribute)
+    {
+        return attribute.ConstructorArguments.Length == 1 ? attribute.ConstructorArguments[0].Value as string : null;
+    }
+
+    private static string? TemplateOf(ITypeSymbol type)
+    {
+        var attribute = AttributeOf(type);
+        return attribute is null ? null : NameIn(attribute) ?? "";
+    }
+
+    private static string? CalledName(ExpressionSyntax expression)
+    {
+        if (expression is MemberAccessExpressionSyntax member)
+        {
+            return member.Name.Identifier.ValueText;
+        }
+        if (expression is MemberBindingExpressionSyntax binding)
+        {
+            return binding.Name.Identifier.ValueText;
+        }
+        if (expression is SimpleNameSyntax simple)
+        {
+            return simple.Identifier.ValueText;
+        }
+        return null;
+    }
+
+    private static ArgumentSyntax? ArgumentFor(InvocationExpressionSyntax invocation, IParameterSymbol parameter)
+    {
+        var arguments = invocation.ArgumentList.Arguments;
+        foreach (var argument in arguments)
+        {
+            if (argument.NameColon is not null && argument.NameColon.Name.Identifier.ValueText == parameter.Name)
+            {
+                return argument;
+            }
+        }
+        if (parameter.Ordinal < arguments.Count && arguments[parameter.Ordinal].NameColon is null)
+        {
+            return arguments[parameter.Ordinal];
+        }
+        return null;
+    }
+
+    private static string Key(ITypeSymbol type, string template)
+    {
+        return Qualified(type) + "\n" + template;
+    }
+
+    private static string Qualified(ITypeSymbol type)
+    {
+        return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+    }
+
+    private bool TryElement(ITypeSymbol type, out ITypeSymbol? element, out string? reason)
     {
         element = null;
-        reason = "";
-        if (context.Sequence is not null
-            && SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, context.Sequence))
+        reason = null;
+        if (_sequence is not null
+            && SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, _sequence))
         {
             element = ((INamedTypeSymbol)type).TypeArguments[0];
             return true;
@@ -379,38 +727,11 @@ internal static class TemplateResolver
         }
     }
 
-    private static bool AllImplementationsMapped(ITypeSymbol iface, Context context, out string reason)
-    {
-        reason = "";
-        foreach (var candidate in context.SourceTypes.Value)
-        {
-            if (candidate.TypeKind == TypeKind.Interface || candidate.IsAbstract)
-            {
-                continue;
-            }
-            if (!candidate.AllInterfaces.Contains((INamedTypeSymbol)iface, SymbolEqualityComparer.Default))
-            {
-                continue;
-            }
-            if (!context.Mapped.ContainsKey(candidate))
-            {
-                reason = $"its implementation '{candidate.ToDisplayString()}' has no template";
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static string RendererOf(INamedTypeSymbol type)
-    {
-        return $"global::{type.ContainingNamespace.ToDisplayString()}.{type.Name}Renderer";
-    }
-
-    private static List<IPropertySymbol> ReadableProperties(INamedTypeSymbol type, Compilation compilation)
+    private List<IPropertySymbol> ReadableProperties(ITypeSymbol type)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var result = new List<IPropertySymbol>();
-        for (var current = type; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        foreach (var current in Hierarchy(type))
         {
             foreach (var property in current.GetMembers().OfType<IPropertySymbol>())
             {
@@ -422,7 +743,7 @@ internal static class TemplateResolver
                 {
                     continue;
                 }
-                if (!compilation.IsSymbolAccessibleWithin(property.GetMethod, compilation.Assembly))
+                if (!_compilation.IsSymbolAccessibleWithin(property.GetMethod, _compilation.Assembly))
                 {
                     continue;
                 }
@@ -432,11 +753,32 @@ internal static class TemplateResolver
         return result;
     }
 
-    private static List<INamedTypeSymbol> AllSourceTypes(Compilation compilation)
+    private static IEnumerable<ITypeSymbol> Hierarchy(ITypeSymbol type)
     {
+        if (type.TypeKind == TypeKind.Interface)
+        {
+            yield return type;
+            foreach (var inherited in type.AllInterfaces)
+            {
+                yield return inherited;
+            }
+            yield break;
+        }
+        for (var current = type; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+        {
+            yield return current;
+        }
+    }
+
+    private List<INamedTypeSymbol> SourceTypes()
+    {
+        if (_sourceTypes is not null)
+        {
+            return _sourceTypes;
+        }
         var result = new List<INamedTypeSymbol>();
         var pending = new Stack<INamespaceOrTypeSymbol>();
-        pending.Push(compilation.Assembly.GlobalNamespace);
+        pending.Push(_compilation.Assembly.GlobalNamespace);
         while (pending.Count > 0)
         {
             var current = pending.Pop();
@@ -455,6 +797,7 @@ internal static class TemplateResolver
             }
         }
         result.Sort((a, b) => string.CompareOrdinal(a.ToDisplayString(), b.ToDisplayString()));
+        _sourceTypes = result;
         return result;
     }
 }

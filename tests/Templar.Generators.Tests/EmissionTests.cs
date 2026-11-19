@@ -8,11 +8,14 @@ namespace Templar.Generators.Tests;
 public class EmissionTests
 {
     private const string Model = "namespace App;\n"
+        + "using Templar.Rendering;\n"
         + "public enum Color { Red, Green }\n"
         + "public interface IShape { }\n"
-        + "public sealed class Circle : IShape { public int Radius { get; init; } }\n"
-        + "public sealed class Square : IShape { public int Side { get; init; } }\n"
-        + "public sealed class Item { public required string Name { get; init; } }\n"
+        + "[Template(\"Circle\")] public sealed record Circle(int Radius) : IShape;\n"
+        + "[Template(\"Square\")] public sealed record Square(int Side) : IShape;\n"
+        + "[Template(\"Item\")] public sealed record Item(string Name);\n"
+        + "public sealed record Tag(string Name);\n"
+        + "[Template(\"Card\")]\n"
         + "public sealed class Card\n"
         + "{\n"
         + "    public required string Title { get; init; }\n"
@@ -20,12 +23,15 @@ public class EmissionTests
         + "    public double? Ratio { get; init; }\n"
         + "    public Color Color { get; init; }\n"
         + "    public Item? Lead { get; init; }\n"
-        + "    public required Templar.Rendering.Sequence<Item> Items { get; init; }\n"
+        + "    public required Sequence<Item> Items { get; init; }\n"
         + "    public System.Collections.Generic.IReadOnlyList<string> Notes { get; init; } = [];\n"
         + "    public int[] Numbers { get; init; } = [];\n"
         + "    public required IShape Shape { get; init; }\n"
         + "    public System.Collections.Generic.IEnumerable<IShape> Shapes { get; init; } = [];\n"
-        + "    public System.Collections.Generic.IEnumerable<Templar.Rendering.Sequence<Item>> Groups { get; init; } = [];\n"
+        + "    public System.Collections.Generic.IEnumerable<Sequence<Item>> Groups { get; init; } = [];\n"
+        + "    public Tag? Badge { get; init; }\n"
+        + "    public required Sequence<Tag> Tags { get; init; }\n"
+        + "    public Templar.Presets.Using? Import { get; init; }\n"
         + "    public string @class => \"c\";\n"
         + "}\n";
 
@@ -38,6 +44,8 @@ public class EmissionTests
         + "shape {{ shape }}\n"
         + "shapes {{ shapes }}\n"
         + "groups {{ groups }}\n"
+        + "badge {{ badge : Tag }} tags {{ tags : Tag }}\n"
+        + "import {{ import }}\n"
         + "class {{ CLASS }}\\{{ escaped \\}}";
 
     private static GeneratorHarness.Run Generate()
@@ -49,27 +57,32 @@ public class EmissionTests
                                              ("/proj/Templates/Item.tpl", "{{ name }}"),
                                              ("/proj/Templates/Circle.tpl", "circle {{ radius }}"),
                                              ("/proj/Templates/Square.tpl", "square {{ side }}"),
+                                             ("/proj/Templates/Tag.tpl", "#{{ name }}"),
+                                             ("/proj/Templates/Unused.tpl", "never {{ name }}"),
                                          });
     }
 
     [Fact]
-    public void Each_hole_write_is_chosen_from_the_declared_type_of_its_property()
+    public void Each_spot_write_is_chosen_from_the_declared_type_of_its_property()
     {
         var run = Generate();
         Assert.Empty(run.Diagnostics);
-        var source = run.Sources["App.Card.g.cs"];
+        var source = run.Sources["Card.g.cs"];
 
         Assert.Contains("        w.Text(model.Title);\n", source);
         Assert.Contains("        w.Format(model.Count);\n", source);
         Assert.Contains("        w.Format(model.Ratio);\n", source);
         Assert.Contains("        w.Format(model.Color);\n", source);
-        Assert.Contains("        yield return w.Compose(model.Lead, global::App.ItemRenderer.Steps);\n", source);
-        Assert.Contains("        yield return w.List(model.Items, global::App.ItemRenderer.Steps);\n", source);
+        Assert.Contains("        yield return w.Compose(model.Lead, global::App.Templates.ItemTemplate.Steps);\n", source);
+        Assert.Contains("        yield return w.List(model.Items, global::App.Templates.ItemTemplate.Steps);\n", source);
         Assert.Contains("        yield return w.List(model.Notes, global::Templar.Rendering.TemplarWriter.TextItem);\n", source);
         Assert.Contains("        yield return w.List(model.Numbers, global::Templar.Rendering.TemplarWriter.FormatItem<int>);\n", source);
         Assert.Contains("        yield return w.Compose(model.Shape, global::Templar.Rendering.RenderRegistry.Steps);\n", source);
         Assert.Contains("        yield return w.List(model.Shapes, global::Templar.Rendering.RenderRegistry.Steps);\n", source);
-        Assert.Contains("        yield return w.List(model.Groups, (w1, m1) => global::Templar.Rendering.TemplarWriter.ListItem(w1, m1, global::App.ItemRenderer.Steps));\n", source);
+        Assert.Contains("        yield return w.List(model.Groups, (w1, m1) => global::Templar.Rendering.TemplarWriter.ListItem(w1, m1, global::App.Templates.ItemTemplate.Steps));\n", source);
+        Assert.Contains("        yield return w.Compose(model.Badge, global::App.Templates.TagTemplate.Steps);\n", source);
+        Assert.Contains("        yield return w.List(model.Tags, global::App.Templates.TagTemplate.Steps);\n", source);
+        Assert.Contains("        yield return w.Compose(model.Import, global::Templar.Rendering.RenderRegistry.Find<global::Templar.Presets.Using>(\"Presets/Using\"));\n", source);
         Assert.Contains("        w.Text(model.@class);\n", source);
         Assert.Contains("        w.Literal(\"\\nclass \");\n", source);
         Assert.Contains("        w.Literal(\"{{ escaped }}\");\n", source);
@@ -77,11 +90,12 @@ public class EmissionTests
     }
 
     [Fact]
-    public void Generated_renderers_hold_no_conditional_and_no_loop()
+    public void Emitted_renderers_hold_no_conditional_and_no_loop()
     {
         var run = Generate();
         Assert.Empty(run.Diagnostics);
-        Assert.Equal(4, run.Sources.Count);
+        Assert.Equal(new[] { "Card.g.cs", "Circle.g.cs", "Item.g.cs", "Square.g.cs", "Tag.g.cs" },
+                     run.Sources.Keys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray());
 
         var forbidden = new[]
         {
@@ -114,12 +128,13 @@ public class EmissionTests
     }
 
     [Fact]
-    public void Emits_the_render_entry_the_flat_renderer_and_the_registration()
+    public void Emits_one_class_per_template_with_a_renderer_per_pair_and_their_registration()
     {
         var run = GeneratorHarness.Generate(new[]
                                             {
                                                 "namespace App.Orders; public sealed class Requisite { public required string Name { get; init; } public required Templar.Rendering.Sequence<Line> Lines { get; init; } }",
-                                                "namespace App.Orders; public sealed class Line { public required string Sku { get; init; } }",
+                                                "namespace App.Orders; [Templar.Rendering.Template(\"Orders/Line\")] public sealed record Line(string Sku);",
+                                                "namespace App; public static class Probe { public static string Run(App.Orders.Requisite r) => Templar.Rendering.Compositor.ResolveTemplate(r, \"Orders/Requisite\"); }",
                                             },
                                             new[]
                                             {
@@ -128,24 +143,19 @@ public class EmissionTests
                                             });
 
         Assert.Empty(run.Diagnostics);
-        var expected = "// <auto-generated/>\n"
+        var requisite = "// <auto-generated/>\n"
             + "#nullable enable\n"
             + "\n"
-            + "namespace App.Orders;\n"
+            + "namespace App.Templates.Orders;\n"
             + "\n"
-            + "public static class RequisiteRenderer\n"
+            + "internal static class RequisiteTemplate\n"
             + "{\n"
-            + "    public static string Render(this global::App.Orders.Requisite model, global::Templar.Rendering.RenderOptions? options = null)\n"
-            + "    {\n"
-            + "        return global::Templar.Rendering.TemplarWriter.Render(model, Steps, options);\n"
-            + "    }\n"
-            + "\n"
             + "    internal static global::System.Collections.Generic.IEnumerator<object?> Steps(global::Templar.Rendering.TemplarWriter w, global::App.Orders.Requisite model)\n"
             + "    {\n"
             + "        w.Literal(\"requisite \");\n"
             + "        w.Text(model.Name);\n"
             + "        w.Literal(\"\\n{\\n    \");\n"
-            + "        yield return w.List(model.Lines, global::App.Orders.LineRenderer.Steps);\n"
+            + "        yield return w.List(model.Lines, global::App.Templates.Orders.LineTemplate.Steps);\n"
             + "        w.Literal(\"\\n}\");\n"
             + "        yield break;\n"
             + "    }\n"
@@ -153,21 +163,43 @@ public class EmissionTests
             + "    [global::System.Runtime.CompilerServices.ModuleInitializer]\n"
             + "    internal static void Register()\n"
             + "    {\n"
-            + "        global::Templar.Rendering.RenderRegistry.Register<global::App.Orders.Requisite>(Steps);\n"
+            + "        global::Templar.Rendering.RenderRegistry.Register<global::App.Orders.Requisite>(\"Orders/Requisite\", Steps);\n"
             + "    }\n"
             + "}\n";
-        Assert.Equal(expected, run.Sources["App.Orders.Requisite.g.cs"]);
+        var line = "// <auto-generated/>\n"
+            + "#nullable enable\n"
+            + "\n"
+            + "namespace App.Templates.Orders;\n"
+            + "\n"
+            + "internal static class LineTemplate\n"
+            + "{\n"
+            + "    internal static global::System.Collections.Generic.IEnumerator<object?> Steps(global::Templar.Rendering.TemplarWriter w, global::App.Orders.Line model)\n"
+            + "    {\n"
+            + "        w.Literal(\"line \");\n"
+            + "        w.Text(model.Sku);\n"
+            + "        yield break;\n"
+            + "    }\n"
+            + "\n"
+            + "    [global::System.Runtime.CompilerServices.ModuleInitializer]\n"
+            + "    internal static void Register()\n"
+            + "    {\n"
+            + "        global::Templar.Rendering.RenderRegistry.Register<global::App.Orders.Line>(\"Orders/Line\", Steps);\n"
+            + "        global::Templar.Rendering.RenderRegistry.RegisterDefault<global::App.Orders.Line>(\"Orders/Line\");\n"
+            + "    }\n"
+            + "}\n";
+        Assert.Equal(requisite, run.Sources["Orders.Requisite.g.cs"]);
+        Assert.Equal(line, run.Sources["Orders.Line.g.cs"]);
     }
 
     [Fact]
-    public void Template_with_no_holes_emits_a_renderer_with_no_writes_but_its_literal()
+    public void Template_with_no_spots_emits_a_renderer_with_no_writes_but_its_literal()
     {
-        var run = GeneratorHarness.Generate(new[] { "namespace App; public sealed class Bare { }" },
-                                            new[] { ("/proj/Templates/Bare.tpl", "no placeholders here") });
+        var run = GeneratorHarness.Generate(new[] { "namespace App; [Templar.Rendering.Template(\"Bare\")] public sealed record Bare;" },
+                                            new[] { ("/proj/Templates/Bare.tpl", "no spots here") });
 
         Assert.Empty(run.Diagnostics);
-        var source = run.Sources["App.Bare.g.cs"];
-        Assert.Contains("        w.Literal(\"no placeholders here\");\n        yield break;\n", source);
+        var source = run.Sources["Bare.g.cs"];
+        Assert.Contains("        w.Literal(\"no spots here\");\n        yield break;\n", source);
         Assert.DoesNotContain("w.Text", source);
     }
 }

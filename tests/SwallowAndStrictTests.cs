@@ -1,61 +1,34 @@
 using Templar.Rendering;
 using Templar.Tests.Models.Swallow;
+using Templar.Tests.Models.Values;
 using Xunit;
 
 namespace Templar.Tests;
 
 public class SwallowTests
 {
+    private const string Collapsed =
+        """
+        class Outer
+        {
+        }
+        """;
+
     [Fact]
-    public void EmptyExpression_OnOwnLine_CollapsesLine()
+    public void NullSpot_OnOwnLine_CollapsesLine()
     {
-        var t = Template.Parse(
-            """
-            class Outer
-            {
-                {{ body }}
-            }
-            """);
-        var expected =
-            """
-            class Outer
-            {
-            }
-            """;
-        Assert.Equal(expected, t.Render());
+        Assert.Equal(Collapsed, Compositor.ResolveTemplate(new Text(null), "Indent/ClassBody"));
     }
 
     [Fact]
-    public void EmptyExpression_OnOwnLine_StringSetToEmpty_AlsoCollapses()
+    public void EmptyStringSpot_OnOwnLine_AlsoCollapses()
     {
-        var t = Template.Parse(
-            """
-            class Outer
-            {
-                {{ body }}
-            }
-            """);
-        t["body"] = "";
-        var expected =
-            """
-            class Outer
-            {
-            }
-            """;
-        Assert.Equal(expected, t.Render());
+        Assert.Equal(Collapsed, Compositor.ResolveTemplate(new Text(""), "Indent/ClassBody"));
     }
 
     [Fact]
-    public void NonEmptyExpression_KeepsLine()
+    public void NonEmptySpot_KeepsLine()
     {
-        var t = Template.Parse(
-            """
-            class Outer
-            {
-                {{ body }}
-            }
-            """);
-        t["body"] = "X";
         var expected =
             """
             class Outer
@@ -63,53 +36,47 @@ public class SwallowTests
                 X
             }
             """;
-        Assert.Equal(expected, t.Render());
+        Assert.Equal(expected, Compositor.ResolveTemplate(new Text("X"), "Indent/ClassBody"));
     }
 
     [Fact]
     public void DeliberateBlankLine_Preserved()
     {
-        var t = Template.Parse("A\n\nB");
-        Assert.Equal("A\n\nB", t.Render());
+        Assert.Equal("A\n\nB", Compositor.ResolveTemplate(new Nothing(), "Swallow/BlankLine"));
     }
 
     [Fact]
-    public void MixedLine_ExpressionEmpty_LiteralPresent_KeepsLine()
+    public void MixedLine_SpotEmpty_LiteralPresent_KeepsLine()
     {
-        var t = Template.Parse("    foo {{ x }}\nafter");
-        t["x"] = "";
-        Assert.Equal("    foo \nafter", t.Render());
+        Assert.Equal("    foo \nafter", Compositor.ResolveTemplate(new Text(""), "Swallow/MixedLine"));
     }
 
     [Fact]
-    public void MultipleEmptyExpressions_OnSameLine_StillSwallows()
+    public void MultipleEmptySpots_OnSameLine_StillSwallows()
     {
-        var t = Template.Parse("before\n  {{ a }}  {{ b }}  \nafter");
-        Assert.Equal("before\nafter", t.Render());
+        Assert.Equal("before\nafter", Compositor.ResolveTemplate(new Two(null, null), "Swallow/TwoEmpty"));
     }
 
     [Fact]
     public void NestedList_RendersEmpty_SwallowsHostLine()
     {
-        var host = new ListHost { Inner = Sequence.Lines(Array.Empty<Empty>()) };
-        Assert.Equal("before\nafter", host.Render());
+        var host = new ListHost(Sequence.Lines(Array.Empty<Empty>()));
+        Assert.Equal("before\nafter", Compositor.ResolveTemplate(host));
     }
 
     [Fact]
     public void NestedType_WithEmptyTemplate_SwallowsHostLine()
     {
-        var host = new TypeHost { Inner = new Empty() };
-        Assert.Equal("before\nafter", host.Render());
+        var host = new TypeHost(new Empty());
+        Assert.Equal("before\nafter", Compositor.ResolveTemplate(host));
     }
 }
 
-public class PlaceholderScannerHonorsNewSyntaxSmokeTest
+public class SpotScannerHonorsEscapesSmokeTest
 {
     [Fact]
-    public void EscapedBraces_AroundPlaceholder()
+    public void EscapedBraces_AroundSpot()
     {
-        var t = Template.Parse(@"\{{ {{ name }} \}}");
-        t["name"] = "X";
-        Assert.Equal("{{ X }}", t.Render());
+        Assert.Equal("{{ X }}", Compositor.ResolveTemplate(new Text("X"), "Escape/Mix"));
     }
 }

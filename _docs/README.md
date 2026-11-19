@@ -1,59 +1,52 @@
 # Templar Documentation
 
-Templar is a type-resolved template composition engine for C# code
-generation: a plain type is its template, its properties are the template's
-holes, and every value composes by its own type. Its generator compiles each
-template under `Templates/` into the renderer of the type at its namespace path
-and checks both at compile time. This folder is the long-form reference; the project
-[README](../README.md) is the elevator pitch and quick-start.
+Templar is a template composition engine for code generation: templates are views,
+objects are their view models. A template names the properties it uses; any object
+carrying them fills it; the Templar generator checks every (type, template) pairing
+your code reaches and compiles it at build time. This folder is the long-form
+reference; the project [README](../README.md) is the elevator pitch and quick-start.
 
 ## Reading order
 
-Each doc stands on its own. Read the model first, then how a template finds its
-type and how the generator is wired; the syntax and the string-keyed `Template`
-API sit underneath:
+Each doc stands on its own. Read the model first, then names, wiring and diagnostics;
+the syntax sits underneath:
 
 | Doc                              | Read it when…                                                                   |
 |----------------------------------|---------------------------------------------------------------------------------|
-| [composition.md](composition.md) | You're modelling what you generate as types — variants as interface implementations, lists. |
-| [integration.md](integration.md) | You're wiring the generator, reading its diagnostics, using Templar inside a source generator, or loading templates by name. |
-| [syntax.md](syntax.md)           | You need the placeholder, comment, and indentation rules.                       |
-| [templates.md](templates.md)     | You're rendering a template with no type behind it, filled by string key.      |
+| [composition.md](composition.md) | You're rendering your objects through templates — defaults, `: Template` spots, variants, lists. |
+| [integration.md](integration.md) | You're wiring the generator, reading what it emits or reports, or using Templar inside a source generator. |
+| [syntax.md](syntax.md)           | You need the spot, comment, escape, and indentation rules.                      |
 
 ## What lives where
 
 | Concept                | Page                                              |
 |------------------------|---------------------------------------------------|
-| `{{ var }}` / `{{# comment }}`                   | [syntax.md](syntax.md)                          |
+| `{{ spot }}` / `{{ spot : Template }}` / `{{# comment }}` | [syntax.md](syntax.md)               |
 | Multi-line indentation behavior                  | [syntax.md](syntax.md#indentation-behavior) |
-| `Template.Parse`, `Set`, `Render`                | [templates.md](templates.md)                    |
-| `RenderOptions` (newline + indent)               | [templates.md](templates.md#render-options)     |
-| `TemplateParseException`                         | [templates.md](templates.md#exceptions), [integration.md](integration.md#exception-model) |
-| The model — type is template, values compose by type | [composition.md](composition.md#the-model)  |
-| How each hole is written, by declared type       | [composition.md](composition.md#how-a-hole-is-written) |
+| The model — templates are views, objects their view models | [composition.md](composition.md#the-model) |
+| `[Template]` defaults                            | [composition.md](composition.md#a-types-default-template) |
+| How each spot is written, by declared type       | [composition.md](composition.md#how-a-spot-is-written) |
 | Variants, the render registry                    | [composition.md](composition.md#variants-are-types) |
 | `Sequence<T>` and lists                          | [composition.md](composition.md#lists)          |
 | The iterative engine                             | [composition.md](composition.md#the-engine)     |
 | `CSharpFile` preset                              | [composition.md](composition.md#worked-preset--csharpfile) |
-| How a `.tpl` finds its type                      | [integration.md](integration.md#finding-the-type-of-a-template) |
-| Wiring, generated code, diagnostics `TMPLR001`–`TMPLR008` | [integration.md](integration.md#wiring)  |
+| Template names                                   | [integration.md](integration.md#template-names) |
+| Pairs, generated code, diagnostics `TMPLR002`–`TMPLR008` | [integration.md](integration.md#pairs)  |
+| `Compositor.ResolveTemplate` at run time, `RenderOptions` | [integration.md](integration.md#run-time) |
 | Templar inside a source generator                | [integration.md](integration.md#inside-a-source-generator) |
-| `TemplateSet` — string-keyed loading, options propagation | [integration.md](integration.md#templateset--string-keyed-templates) |
-| Render patterns                                  | [integration.md](integration.md#patterns)       |
 
 ## Source pointers
 
 | Type / file                          | Location                                  |
 |--------------------------------------|-------------------------------------------|
-| `Template`                           | `src/Rendering/Template.cs`               |
-| `TemplateSet`                        | `src/Rendering/TemplateSet.cs`            |
+| `Compositor` (`ResolveTemplate`)     | `src/Rendering/Compositor.cs`             |
+| `TemplateAttribute`                  | `src/Rendering/TemplateAttribute.cs`      |
 | `TemplarWriter` (the render sink and the writes generated renderers call) | `src/Rendering/TemplarWriter.cs` |
-| `RenderRegistry` (renderers by runtime type, for interface holes) | `src/Rendering/RenderRegistry.cs` |
+| `RenderRegistry` (renderers by type and template name, defaults by type) | `src/Rendering/RenderRegistry.cs` |
 | `Sequence<T>` (+ `Sequence.Lines` / `BlankLines` / `CommaList`) | `src/Rendering/Sequence.cs` |
 | `CSharpFile`, `Using`                | `src/Presets/` (templates in `src/Templates/Presets/`) |
 | `RenderOptions`                      | `src/Rendering/RenderOptions.cs`          |
-| Parser (`Template.Validate`)         | `src/Rendering/Template.cs`               |
 | Engine (`Renderer.Drive`)            | `src/Rendering/Renderer.cs`               |
-| `RendererGenerator` (each `.tpl` → its type's renderer), `TemplateResolver`, diagnostics | `src/Templar.Generators/` |
+| `RendererGenerator`, `TemplateResolver` (pairs and writes), `TemplateCompiler` (template parsing), diagnostics | `src/Templar.Generators/` |
 | Analyzer-loader fixtures             | `fixtures/`                               |
 | Test corpus (behavior contract)      | `tests/`                                  |

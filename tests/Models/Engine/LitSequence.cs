@@ -2,7 +2,5 @@ using Templar.Rendering;
 
 namespace Templar.Tests.Models.Engine;
 
-public sealed class LitSequence
-{
-    public required Sequence<Lit> Items { get; init; }
-}
+[Template("Models/Engine/LitSequence")]
+public sealed record LitSequence(Sequence<Lit> Items);

@@ -7,34 +7,25 @@ namespace Templar.Tests;
 public class CompiledEmitTests
 {
     [Fact]
-    public void Compiled_scalar_matches_interpreted()
+    public void Compiled_spots_render_their_values()
     {
-        string interpreted = Template.Parse("Hello {{ who }} and {{ place }}!")
-            .Set("who", "World")
-            .Set("place", "Templar")
-            .Render();
-        string compiled = new Greeting { Who = "World", Place = "Templar" }.Render();
-        Assert.Equal(interpreted, compiled);
+        Assert.Equal("Hello World and Templar!", Compositor.ResolveTemplate(new Greeting("World", "Templar")));
     }
 
     [Fact]
-    public void Compiled_nested_type_matches_interpreted_multiline_value()
+    public void Compiled_nested_type_renders_its_lines_at_the_spot_column()
     {
-        string interpreted = Template.Parse("before\n    {{ inside }}\nafter")
-            .Set("inside", "line-a\nline-b")
-            .Render();
-        string compiled = new Outer { Inside = new TwoLines() }.Render();
-        Assert.Equal(interpreted, compiled);
+        Assert.Equal("before\n    line-a\n    line-b\nafter", Compositor.ResolveTemplate(new Outer(new TwoLines())));
     }
 
     [Fact]
     public void Compiled_deep_nesting_does_not_overflow()
     {
-        var acc = new Wrap { Leaf = "X" };
+        var acc = new Wrap(null, "X");
         for (int i = 0; i < 5000; i++)
         {
-            acc = new Wrap { Inside = acc };
+            acc = new Wrap(acc);
         }
-        Assert.Equal("X", acc.Render());
+        Assert.Equal("X", Compositor.ResolveTemplate(acc));
     }
 }

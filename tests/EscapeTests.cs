@@ -1,4 +1,5 @@
 using Templar.Rendering;
+using Templar.Tests.Models.Values;
 using Xunit;
 
 namespace Templar.Tests;
@@ -8,52 +9,42 @@ public class EscapeTests
     [Fact]
     public void EscapedOpenBraces_EmitLiteral()
     {
-        var t = Template.Parse(@"\{{x}}");
-        Assert.Equal("{{x}}", t.Render());
+        Assert.Equal("{{x}}", Compositor.ResolveTemplate(new Nothing(), "Escape/OpenBraces"));
     }
 
     [Fact]
     public void EscapedOpen_DoesNotSubstitute()
     {
-        var t = Template.Parse(@"\{{ name }}");
-        t["name"] = "Jeff";
-        Assert.Equal("{{ name }}", t.Render());
+        Assert.Equal("{{ x }}", Compositor.ResolveTemplate(new Text("Jeff"), "Escape/OpenBeforeSpot"));
     }
 
     [Fact]
     public void EscapedClose_EmitsLiteral()
     {
-        var t = Template.Parse(@"a\}}b");
-        Assert.Equal("a}}b", t.Render());
+        Assert.Equal("a}}b", Compositor.ResolveTemplate(new Nothing(), "Escape/Close"));
     }
 
     [Fact]
     public void EscapedBackslash_EmitsSingleBackslash()
     {
-        var t = Template.Parse(@"a\\b");
-        Assert.Equal(@"a\b", t.Render());
+        Assert.Equal(@"a\b", Compositor.ResolveTemplate(new Nothing(), "Escape/Backslash"));
     }
 
     [Fact]
     public void BackslashBeforeNormalChar_PreservedLiteral()
     {
-        var t = Template.Parse(@"a\nb");
-        Assert.Equal(@"a\nb", t.Render());
+        Assert.Equal(@"a\nb", Compositor.ResolveTemplate(new Nothing(), "Escape/BackslashBeforeLetter"));
     }
 
     [Fact]
     public void EscapeAndSubstitution_Mix()
     {
-        var t = Template.Parse(@"\{{ {{ var }} \}}");
-        t["var"] = "X";
-        Assert.Equal("{{ X }}", t.Render());
+        Assert.Equal("{{ X }}", Compositor.ResolveTemplate(new Text("X"), "Escape/Mix"));
     }
 
     [Fact]
-    public void DoubleBackslashBeforeBraces_EmitsBackslashThenTag()
+    public void DoubleBackslashBeforeBraces_EmitsBackslashThenSpot()
     {
-        var t = Template.Parse(@"\\{{ var }}");
-        t["var"] = "X";
-        Assert.Equal(@"\X", t.Render());
+        Assert.Equal(@"\X", Compositor.ResolveTemplate(new Text("X"), "Escape/DoubleBackslash"));
     }
 }

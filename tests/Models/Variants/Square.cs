@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Variants;
 
-public sealed class Square : IShape
-{
-    public int Side { get; init; }
-}
+[Template("Models/Variants/Square")]
+public sealed record Square(int Side) : IShape;

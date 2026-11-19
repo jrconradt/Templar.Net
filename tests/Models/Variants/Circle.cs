@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Variants;
 
-public sealed class Circle : IShape
-{
-    public int Radius { get; init; }
-}
+[Template("Models/Variants/Circle")]
+public sealed record Circle(int Radius) : IShape;

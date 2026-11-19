@@ -34,7 +34,7 @@ public sealed class RendererGenerator : IIncrementalGenerator
             foreach (var finding in output.Findings)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(Descriptors.ById(finding.Id),
-                                                       LocationFor(finding.Path, finding.Line),
+                                                       LocationFor(finding.Site),
                                                        finding.Arguments.Cast<object>().ToArray()));
             }
             if (output.Source.Length > 0)
@@ -44,13 +44,11 @@ public sealed class RendererGenerator : IIncrementalGenerator
         });
     }
 
-    private static Location LocationFor(string path, int line)
+    private static Location LocationFor(Site site)
     {
-        var zeroBased = line > 0 ? line - 1 : 0;
-        var span = new LinePositionSpan(new LinePosition(zeroBased, 0),
-                                        new LinePosition(zeroBased, 0));
-        return Location.Create(path,
-                               new TextSpan(0, 0),
-                               span);
+        return Location.Create(site.Path,
+                               new TextSpan(site.Start, site.Length),
+                               new LinePositionSpan(new LinePosition(site.StartLine, site.StartCharacter),
+                                                    new LinePosition(site.EndLine, site.EndCharacter)));
     }
 }

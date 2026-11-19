@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Engine;
 
-public sealed class LitList
-{
-    public required IReadOnlyList<Lit> Items { get; init; }
-}
+[Template("Models/Engine/LitList")]
+public sealed record LitList(IReadOnlyList<Lit> Items);

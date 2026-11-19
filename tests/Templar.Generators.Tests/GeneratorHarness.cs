@@ -199,7 +199,7 @@ internal static class GeneratorHarness
         {
             references.Add(MetadataReference.CreateFromFile(path));
         }
-        references.Add(MetadataReference.CreateFromFile(typeof(Template).Assembly.Location));
+        references.Add(MetadataReference.CreateFromFile(typeof(Compositor).Assembly.Location));
         return references.ToImmutable();
     }
 }

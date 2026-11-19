@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Iterative;
 
-public sealed class Outer
-{
-    public TwoLines? Inside { get; init; }
-}
+[Template("Models/Iterative/Outer")]
+public sealed record Outer(TwoLines? Inside);

@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Compiled;
 
-public sealed class Outer
-{
-    public required TwoLines Inside { get; init; }
-}
+[Template("Models/Compiled/Outer")]
+public sealed record Outer(TwoLines Inside);

@@ -15,25 +15,18 @@ public sealed class FixtureGenerator : IIncrementalGenerator
     {
         context.RegisterPostInitializationOutput(output =>
         {
-            ILine[] lines = [new Stocked { Sku = "A-100" }, new Backordered { Sku = "B-200", Eta = "May" }];
-            var order = new Order
-            {
-                Id = "R-1",
-                Lines = Sequence.Lines(lines),
-                Count = lines.Length,
-                Tags = Sequence.CommaList([new Tag("rush"), new Tag("fragile")]),
-            };
-            var constant = new ConstantClass
-            {
-                Name = "Emitted",
-                Literal = SymbolDisplay.FormatLiteral(order.Render(), quote: true),
-            };
+            ILine[] lines = [new Stocked("A-100"), new Backordered("B-200", "May")];
+            var order = new Order("R-1",
+                                  Sequence.Lines(lines),
+                                  lines.Length,
+                                  Sequence.CommaList([new Tag("rush"), new Tag("fragile")]));
+            var constant = new ConstantClass("Emitted", SymbolDisplay.FormatLiteral(Compositor.ResolveTemplate(order), quote: true));
             var file = new CSharpFile
             {
                 Namespace = "Fixture.Consumer",
-                Body = constant.Render(),
+                Body = Compositor.ResolveTemplate(constant, "ConstantClass"),
             };
-            output.AddSource("Emitted.g.cs", SourceText.From(file.Render(), Encoding.UTF8));
+            output.AddSource("Emitted.g.cs", SourceText.From(Compositor.ResolveTemplate(file), Encoding.UTF8));
         });
     }
 }

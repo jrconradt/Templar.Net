@@ -1,32 +1,27 @@
 # Integration
 
-This page covers how a template finds its type, how the generator is wired, what it
-generates and reports, using Templar inside a source generator, string-keyed loading
-with `TemplateSet`, options, and failures. For the model itself see
-[composition.md](composition.md); for one-off templates see
-[templates.md](templates.md).
+This page covers template names, how the generator is wired, which (type, template)
+pairs it compiles and what it emits, its diagnostics, what happens at run time, and
+using Templar inside a source generator. For the model itself see
+[composition.md](composition.md).
 
-## Finding the type of a template
+## Template names
 
-Templates live under `Templates/`; types live where the code lives. Each `.tpl`
-under `<ProjectDir>/Templates/`, listed as `AdditionalFiles`, is the template of one
-type: its path after `Templates/` is the type's namespace path below the project's
-`RootNamespace`. The type is named `<RootNamespace>.<folder path>.<file name>`, where
-the folder path is the template's folder relative to `Templates/`, each folder a
-dot-separated segment (sanitized to an identifier, `my-widgets` → `my_widgets`). In a
-project whose root namespace is `Shop`:
+Templates live under `<ProjectDir>/Templates/`, listed as `AdditionalFiles`. A
+template's name is its path after `Templates/`, without `.tpl`, with `/` between
+folders:
 
-| File                                  | Type                          |
-|---------------------------------------|-------------------------------|
-| `Templates/Orders/Requisite.tpl`      | `Shop.Orders.Requisite`       |
-| `Templates/Orders/Lines/Stocked.tpl`  | `Shop.Orders.Lines.Stocked`   |
-| `Templates/Injection/Constructor.tpl` | `Shop.Injection.Constructor`  |
+| File | Name |
+|------|------|
+| `Templates/Card.tpl` | `Card` |
+| `Templates/Orders/Requisite.tpl` | `Orders/Requisite` |
+| `Templates/Injection/Constructor.tpl` | `Injection/Constructor` |
 
-The type's `.cs` file can sit in any folder: `Templates/Injection/Constructor.tpl`
-is the template of `Shop.Injection.Constructor` wherever `Constructor.cs` is. The
-type is looked up in the project's own source only, and must be a sealed,
-non-generic, top-level class or record. A `.tpl` listed as `AdditionalFiles` outside
-`Templates/` is a compile-time error (`TMPLR003`).
+Names are compared exactly (case-sensitive). The name is what `[Template("…")]`,
+`Compositor.ResolveTemplate(obj, "…")` and `{{ x : … }}` refer to, and it is searched
+only among this project's templates. A template's name says nothing about the types it
+renders: those live wherever their code lives, in any namespace. A `.tpl` listed as
+`AdditionalFiles` outside `Templates/` is a compile-time error (`TMPLR003`).
 
 ## Wiring
 
@@ -61,12 +56,35 @@ Referencing the projects directly, wire what the package's targets do:
 </ItemGroup>
 ```
 
-Templar builds itself this way: its presets are plain types in `src/Presets/`, their
-templates in `src/Templates/Presets/`, compiled by its own generator.
+Templar builds itself this way: its presets are plain types in `src/Presets/` marked
+`[Template]`, their templates in `src/Templates/Presets/`, compiled by its own
+generator. The generator has no reference to `Templar.dll`.
+
+## Pairs
+
+The generator compiles (type, template) pairs, starting from:
+
+- every type in the project with `[Template("Name")]` — the pair (type, `Name`), also
+  registered as the type's default;
+- every `Compositor.ResolveTemplate(obj, "Name")` call — the pair (static type of
+  `obj`, `Name`); the name must be a constant;
+- every `Compositor.ResolveTemplate(obj)` call — checked against the static type of
+  `obj`: its `[Template]`, or, for an interface or abstract class, the `[Template]` of
+  every implementation.
+
+From each pair it follows the spots: a `{{ x : Name }}` spot reaches (declared type of
+`x`, `Name`), or (item type, `Name`) for a list; a spot whose type has `[Template]`
+reaches that type's pair. Each pair is checked once — every spot names a readable
+property, and every property's type can render — and errors are reported at the site
+that first reached the pair: the call site, the `[Template]` attribute, or the spot,
+with the template line in the message.
+
+A template no pair reaches is still parsed and checked (`TMPLR002`, `TMPLR003`, and
+`TMPLR004` for its `: Name` spots) but is not compiled in.
 
 ## What it generates
 
-For `Templates/Orders/Requisite.tpl` in project `App`:
+For `Templates/Orders/Requisite.tpl` and `Templates/Orders/Line.tpl` in project `App`:
 
 ```
 requisite {{ name }}
@@ -74,8 +92,6 @@ requisite {{ name }}
     {{ lines }}
 }
 ```
-
-and
 
 ```csharp
 namespace App.Orders;
@@ -85,30 +101,30 @@ public sealed class Requisite
     public required string Name { get; init; }
     public required Sequence<Line> Lines { get; init; }
 }
+
+[Template("Orders/Line")]
+public sealed record Line(string Sku);
+
+// somewhere in the project
+Compositor.ResolveTemplate(requisite, "Orders/Requisite");
 ```
 
-(with `Line` a sealed type with its own `Templates/Orders/Line.tpl`), the generator emits
-`App.Orders.Requisite.g.cs`:
+the generator emits `Orders.Requisite.g.cs`:
 
 ```csharp
 // <auto-generated/>
 #nullable enable
 
-namespace App.Orders;
+namespace App.Templates.Orders;
 
-public static class RequisiteRenderer
+internal static class RequisiteTemplate
 {
-    public static string Render(this global::App.Orders.Requisite model, global::Templar.Rendering.RenderOptions? options = null)
-    {
-        return global::Templar.Rendering.TemplarWriter.Render(model, Steps, options);
-    }
-
     internal static global::System.Collections.Generic.IEnumerator<object?> Steps(global::Templar.Rendering.TemplarWriter w, global::App.Orders.Requisite model)
     {
         w.Literal("requisite ");
         w.Text(model.Name);
         w.Literal("\n{\n    ");
-        yield return w.List(model.Lines, global::App.Orders.LineRenderer.Steps);
+        yield return w.List(model.Lines, global::App.Templates.Orders.LineTemplate.Steps);
         w.Literal("\n}");
         yield break;
     }
@@ -116,45 +132,65 @@ public static class RequisiteRenderer
     [global::System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Register()
     {
-        global::Templar.Rendering.RenderRegistry.Register<global::App.Orders.Requisite>(Steps);
+        global::Templar.Rendering.RenderRegistry.Register<global::App.Orders.Requisite>("Orders/Requisite", Steps);
     }
 }
 ```
 
-Each hole is one write, chosen from the property's declared type
-([composition.md](composition.md#how-a-hole-is-written)): `w.Text` for a string,
-`w.Format` for a primitive or enum, `w.Compose(value, XRenderer.Steps)` for a type
-with a template, `w.List(value, …)` for a list, and
-`w.Compose(value, RenderRegistry.Steps)` for an interface. The generated code holds
-no `if`, no loop, and no other conditional; `null` and empty lists are handled inside
-`TemplarWriter`.
+and `Orders.Line.g.cs`, whose `Register` also calls
+`RenderRegistry.RegisterDefault<global::App.Orders.Line>("Orders/Line")`.
+
+One class per reached template, in `<RootNamespace>.Templates.<folders>`, named
+`<file>Template`; one `Steps` overload per type it renders. Everything generated is
+`internal`. Each spot is one write, chosen from the property's declared type
+([composition.md](composition.md#how-a-spot-is-written)): `w.Text` for a string,
+`w.Format` for a primitive or enum, `w.Compose(value, …Template.Steps)` for a
+template, `w.List(value, …)` for a list, `w.Compose(value, RenderRegistry.Steps)` for
+an interface or abstract class, and
+`w.Compose(value, RenderRegistry.Find<T>("Name"))` for a `[Template]` type from a
+referenced assembly. The generated code holds no `if`, no loop, and no other
+conditional; `null` and empty lists are handled inside `TemplarWriter`.
 
 ## Diagnostics
 
-Every template and hole is checked at compile time. Each diagnostic is an error in
-category `Templar`, located at the template (and the hole's line where there is one):
+Every template, `[Template]`, call site and reached pair is checked at compile time.
+Each diagnostic is an error in category `Templar`:
 
-| Id         | Reported when                                                                 |
-|------------|-------------------------------------------------------------------------------|
-| `TMPLR002` | The template is malformed: an unclosed tag, a `|` inside a tag, or a tag that opens with `{{?`, `{{&`, or `{{>`. Nothing is emitted for it. |
-| `TMPLR003` | The template is outside `<ProjectDir>/Templates/`, so it has no namespace path. |
-| `TMPLR004` | No type in the project has the template's name (`<RootNamespace>.<folders after Templates/>.<file>`). |
-| `TMPLR005` | The type is generic, nested, not sealed, static, file-local, a struct, or already the type of another template. |
-| `TMPLR006` | A hole matches no accessible, readable instance property of the type.         |
-| `TMPLR007` | A hole matches more than one property (names differing only in case).        |
-| `TMPLR008` | A hole's property type cannot render: not a string, primitive, enum, type with a template, `Sequence<T>` or `IEnumerable<T>` of one of these, or an interface whose implementations in the project all have templates. |
+| Id | Reported when | Located at |
+|----|---------------|------------|
+| `TMPLR002` | The template is malformed: an unclosed tag, a `\|` inside a tag, a tag that opens with `{{?`, `{{&` or `{{>`, or a spot that is not a property name optionally followed by `: TemplateName`. Nothing is compiled from it. | The template line |
+| `TMPLR003` | The template is outside `<ProjectDir>/Templates/`, so it has no name. | The template |
+| `TMPLR004` | A `[Template]`, a `ResolveTemplate` call or a `: Name` spot names a template that is not declared under `Templates/`. | The attribute, the call's argument, or the spot |
+| `TMPLR005` | The template name passed to `ResolveTemplate` is not a constant. | The call's argument |
+| `TMPLR006` | A spot names no accessible, readable instance property of the type being rendered. | The site that reached the pair; the message names the template line |
+| `TMPLR007` | A spot matches two properties differing only in case. | As `TMPLR006` |
+| `TMPLR008` | A type cannot render: a spot's property is not a string, primitive, enum, `[Template]` type, list or interface/abstract class (and names no template); an implementation of an interface or abstract class has no `[Template]`; `ResolveTemplate(obj)` on a type with no `[Template]`; or a type that generated code cannot name (a value type, an open generic, an anonymous or inaccessible type), including a generic type marked `[Template]`. | The spot's pair site, the call, or the attribute |
 
-A hole that fails `TMPLR006`–`TMPLR008` is left out of the renderer, which is still
-emitted, so the build reports the template error alone. `TMPLR001` (a warning, from
-the analyzer in the same assembly) flags a string literal passed to `Template.Parse`:
-move it into a `.tpl` under `Templates/` for the type it renders.
+A spot that fails `TMPLR006`–`TMPLR008` is left out of the renderer, which is still
+emitted, so the build reports the template error alone.
+
+## Run time
+
+`Compositor.ResolveTemplate(obj, "Name", options?)` looks up the renderer registered
+for (`typeof(T)`, `"Name"`) and drives it; the generator guarantees it exists for
+every call site in the project. `Compositor.ResolveTemplate(obj, options?)` renders
+by `T`'s registered default, or — for an interface or abstract `T` — by the runtime
+type's default. No template is parsed and no `.tpl` is read: the registry lookups are
+the only run-time decisions.
+
+The registry is process-wide and keyed by type and template name, so a type's default
+registered by its own assembly serves every assembly that renders it. Two assemblies
+that each compile a pair for the same type under the same template name register the
+same key; the last module initializer to run wins (`Register` overwrites). Within an
+assembly, nested writes call the compiled renderers directly and do not go through the
+registry.
 
 ## Inside a source generator
 
-A source generator can model its output as types with templates and call
-`model.Render()` in its pipeline. The generator project references `Templar.Net`
-(which compiles its templates) and ships `Templar.dll` beside itself to the
-compiler, so the analyzer loader can resolve it:
+A source generator can render its output with `Compositor.ResolveTemplate` in its
+pipeline. The generator project references `Templar.Net` (which compiles its
+templates) and ships `Templar.dll` beside itself to the compiler, so the analyzer
+loader can resolve it:
 
 ```xml
 <ItemGroup>
@@ -176,113 +212,20 @@ compiler, so the analyzer loader can resolve it:
 
 A consuming project references the generator with `OutputItemType="Analyzer"
 ReferenceOutputAssembly="false"`. `fixtures/Fixture.Generator` and
-`fixtures/Fixture.Consumer` in this repository build exactly that, and
+`fixtures/Fixture.Consumer` in this repository build exactly that: the generator
+renders an `Order` by its `[Template]`, a `ConstantClass` record by a named template,
+and the `CSharpFile` preset by Templar's registered default, and
 `FixtureConsumerTests` asserts the constant the consumer receives.
-
-## `TemplateSet` — string-keyed templates
-
-For templates with no type behind them. A `TemplateSet` is a name →
-template-source dictionary plus a shared `RenderOptions`; the caller picks a
-template by name with `Get(name)` and fills its holes by key. Each `Get`
-returns a new `Template` parsed from the stored source, with the set's options
-copied in.
-
-### Loading paths
-
-| Method                                                          | Source                                                | Name derivation                               |
-|-----------------------------------------------------------------|-------------------------------------------------------|-----------------------------------------------|
-| `Add(string name, string text)`                                 | In-memory string literal                              | The `name` you pass.                          |
-| `AddDirectory(string path, string extension = ".tpl")`          | All `*.tpl` files in `path` (non-recursive)           | File name without extension.                  |
-| `AddEmbeddedResource(Assembly asm, string resourceName)`        | One embedded resource in `asm`                        | Last `.X.tpl`-style segment — see below.      |
-| `AddEmbeddedTemplates(Assembly asm, string prefix, string extension = ".tpl")` | Every embedded resource in `asm` whose name starts with `prefix` and ends with `extension` | The name between `prefix` and `extension`. |
-
-All four return `this` for chaining. A `.tpl` loaded this way is data, not the
-template of a type: embed it (or read it from disk) rather than listing it as
-`AdditionalFiles`, which would ask the generator for its type.
-
-### Embedded resource naming
-
-`AddEmbeddedResource` derives the lookup name by stripping the extension and
-the prefix up to the second-to-last dot. So a resource called
-`MyAsm.Templates.Greeting.tpl` lands as `Greeting`. Names are case-insensitive.
-
-```csharp
-var set = new TemplateSet()
-    .AddEmbeddedTemplates(typeof(MyType).Assembly, prefix: "MyAsm.Templates.");
-
-set.Get("Greeting");   // looks up "Greeting", case-insensitive
-```
-
-### Resolving templates
-
-```csharp
-var set = new TemplateSet().AddDirectory("Templates");
-var t = set.Get("Calculator");
-t["name"] = "BasicCalculator";
-var output = t.Render();
-```
-
-`Get` throws `KeyNotFoundException` if the name is not registered;
-`Contains(name)` tests membership.
-
-### Options propagate
-
-`RenderOptions` set on the **set** are copied into every template the set
-produces.
-
-```csharp
-var set = new TemplateSet()
-    .Add("hello", "Hello,\n{{ who }}")
-    .WithOptions(new RenderOptions { Newline = "\r\n" });
-
-var t = set.Get("hello");
-t["who"] = "team";
-t.Render();   // → "Hello,\r\nteam"
-```
-
-Templates returned by `Get` are independent instances.
 
 ## Exception model
 
-| Exception                    | When                                                                    | Useful members                                |
-|------------------------------|-------------------------------------------------------------------------|-----------------------------------------------|
-| `TemplateParseException`     | `Template.Parse` sees malformed template text. (A malformed `.tpl` under `Templates/` is `TMPLR002` at compile time.) | `Line`, `Column`                              |
-| `InvalidOperationException`  | An interface-typed hole holds a value whose runtime type has no registered renderer (a type from outside the project). | Message names the type.                       |
-| `KeyNotFoundException`       | `TemplateSet.Get(name)` for a name that wasn't added.                   | Standard BCL exception.                       |
-
-## Patterns
-
-### Rendering a model
-
-Build the model, render each root. Each root's type decides its template and
-every value under it renders by its own type.
-
-```csharp
-foreach (var requisite in requisites)
-{
-    File.WriteAllText($"Generated/{requisite.Name}.txt", requisite.Render());
-}
-```
-
-### One-off render
-
-For a single template with no type behind it:
-
-```csharp
-var t = Template.Parse(source);
-t["x"] = value;
-var output = t.Render();
-```
-
-### Newline + indent control
-
-`RenderOptions` is the configuration knob. Pass it to a type's `Render(options)`,
-set it on a `TemplateSet` so every `Get` inherits, or on a `Template` via
-`WithOptions`. Whichever level you set, the renderer honors the configured
-newline end-to-end (literal text, multi-line values, and list separators).
+| Exception | When | Message |
+|-----------|------|---------|
+| `InvalidOperationException` | An interface- or abstract-typed spot (or root) holds a value whose runtime type has no registered default — a type from outside the project. | Names the type. |
+| `InvalidOperationException` | `RenderRegistry.Find<T>(name)` (or a `ResolveTemplate` call in a project the generator did not run on) for a pair that was never registered. | Names the type and the template. |
 
 ## Zero dependencies
 
-The runtime has no external NuGet references. Drop it into a library that
-needs to remain dependency-light — a Roslyn source generator project, a build
-task, a CLI — without dragging in a templating ecosystem.
+The runtime has no external NuGet references. Drop it into a library that needs to
+remain dependency-light — a Roslyn source generator project, a build task, a CLI —
+without dragging in a templating ecosystem.

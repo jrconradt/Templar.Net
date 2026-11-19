@@ -1,6 +1,9 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Entry;
 
-public sealed class Indexed
+[Template("Models/Entry/Indexed")]
+public sealed record Indexed
 {
     public string this[int i] => "INDEXED";
 

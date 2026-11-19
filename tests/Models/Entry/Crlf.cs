@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Entry;
 
-public sealed class Crlf
-{
-    public string Body { get; init; } = "";
-}
+[Template("Models/Entry/Crlf")]
+public sealed record Crlf(string Body);

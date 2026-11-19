@@ -1,4 +1,3 @@
-using Templar.Rendering;
 using Xunit;
 
 namespace Templar.Generators.Tests;
@@ -12,16 +11,15 @@ public class EndToEndTests
     }
 
     [Fact]
-    public void Generated_renderer_matches_the_interpreted_template()
+    public void Text_spots_render_their_property_values()
     {
         var source = "namespace App;\n"
-            + "public sealed class Greeting { public required string Who { get; init; } public required string Place { get; init; } }\n"
-            + "public static class Probe { public static string Run() => new Greeting { Who = \"Ada\", Place = \"Templar\" }.Render(); }\n";
+            + "using Templar.Rendering;\n"
+            + "[Template(\"Greeting\")] public sealed record Greeting(string Who, string Place);\n"
+            + "public static class Probe { public static string Run() => Compositor.ResolveTemplate(new Greeting(\"Ada\", \"Templar\")); }\n";
 
         var rendered = Render(source, ("/proj/Templates/Greeting.tpl", "Hello {{ who }}, welcome to {{ place }}!"));
 
-        var interpreted = Template.Parse("Hello {{ who }}, welcome to {{ place }}!").Set("who", "Ada").Set("place", "Templar").Render();
-        Assert.Equal(interpreted, rendered);
         Assert.Equal("Hello Ada, welcome to Templar!", rendered);
     }
 
@@ -29,8 +27,9 @@ public class EndToEndTests
     public void Literal_quotes_newlines_tabs_and_escaped_braces_survive()
     {
         var source = "namespace App;\n"
-            + "public sealed class Tricky { public required string X { get; init; } }\n"
-            + "public static class Probe { public static string Run() => new Tricky { X = \"value\" }.Render(); }\n";
+            + "using Templar.Rendering;\n"
+            + "[Template(\"Tricky\")] public sealed record Tricky(string X);\n"
+            + "public static class Probe { public static string Run() => Compositor.ResolveTemplate(new Tricky(\"value\")); }\n";
 
         var rendered = Render(source, ("/proj/Templates/Tricky.tpl", "line1 \"quoted\"\nline2\twith \\{{ escaped {{ x }}"));
 
@@ -38,12 +37,26 @@ public class EndToEndTests
     }
 
     [Fact]
-    public void Primitive_and_enum_holes_format_with_the_invariant_culture()
+    public void Carriage_returns_in_template_text_are_dropped()
     {
         var source = "namespace App;\n"
+            + "using Templar.Rendering;\n"
+            + "[Template(\"Crlf\")] public sealed record Crlf(string X);\n"
+            + "public static class Probe { public static string Run() => Compositor.ResolveTemplate(new Crlf(\"b\")); }\n";
+
+        var rendered = Render(source, ("/proj/Templates/Crlf.tpl", "a\r\n{{ x }}\r\nc"));
+
+        Assert.Equal("a\nb\nc", rendered);
+    }
+
+    [Fact]
+    public void Primitive_and_enum_spots_format_with_the_invariant_culture()
+    {
+        var source = "namespace App;\n"
+            + "using Templar.Rendering;\n"
             + "public enum Mode { Fast, Slow }\n"
-            + "public sealed class Stats { public int Count { get; init; } public double Ratio { get; init; } public bool On { get; init; } public Mode Mode { get; init; } public long? Missing { get; init; } }\n"
-            + "public static class Probe { public static string Run() => new Stats { Count = 3, Ratio = 1.5, On = true, Mode = Mode.Slow }.Render(); }\n";
+            + "[Template(\"Stats\")] public sealed class Stats { public int Count { get; init; } public double Ratio { get; init; } public bool On { get; init; } public Mode Mode { get; init; } public long? Missing { get; init; } }\n"
+            + "public static class Probe { public static string Run() => Compositor.ResolveTemplate(new Stats { Count = 3, Ratio = 1.5, On = true, Mode = Mode.Slow }); }\n";
 
         var rendered = Render(source, ("/proj/Templates/Stats.tpl", "{{ count }}|{{ ratio }}|{{ on }}|{{ mode }}|{{ missing }}"));
 
@@ -51,12 +64,13 @@ public class EndToEndTests
     }
 
     [Fact]
-    public void Mapped_type_hole_renders_by_its_own_template_at_the_hole_column()
+    public void Template_typed_spot_renders_by_its_template_at_the_spot_column()
     {
         var source = "namespace App;\n"
-            + "public sealed class Outer { public required Inner Inside { get; init; } }\n"
-            + "public sealed class Inner { public required string Name { get; init; } }\n"
-            + "public static class Probe { public static string Run() => new Outer { Inside = new Inner { Name = \"x\" } }.Render(); }\n";
+            + "using Templar.Rendering;\n"
+            + "[Template(\"Outer\")] public sealed record Outer(Inner Inside);\n"
+            + "[Template(\"Inner\")] public sealed record Inner(string Name);\n"
+            + "public static class Probe { public static string Run() => Compositor.ResolveTemplate(new Outer(new Inner(\"x\"))); }\n";
 
         var rendered = Render(source,
                               ("/proj/Templates/Outer.tpl", "before\n    {{ inside }}\nafter"),
@@ -66,12 +80,13 @@ public class EndToEndTests
     }
 
     [Fact]
-    public void Null_mapped_hole_renders_nothing_and_its_line_is_dropped()
+    public void Null_spot_renders_nothing_and_its_line_is_dropped()
     {
         var source = "namespace App;\n"
-            + "public sealed class Outer { public Inner? Inside { get; init; } }\n"
-            + "public sealed class Inner { }\n"
-            + "public static class Probe { public static string Run() => new Outer().Render(); }\n";
+            + "using Templar.Rendering;\n"
+            + "[Template(\"Outer\")] public sealed record Outer(Inner? Inside);\n"
+            + "[Template(\"Inner\")] public sealed record Inner;\n"
+            + "public static class Probe { public static string Run() => Compositor.ResolveTemplate(new Outer(null)); }\n";
 
         var rendered = Render(source,
                               ("/proj/Templates/Outer.tpl", "before\n    {{ inside }}\nafter"),
@@ -85,7 +100,7 @@ public class EndToEndTests
     {
         var source = "namespace App;\n"
             + "using Templar.Rendering;\n"
-            + "public sealed class Item { public required string Name { get; init; } }\n"
+            + "[Template(\"Item\")] public sealed record Item(string Name);\n"
             + "public sealed class Holder\n"
             + "{\n"
             + "    public required Sequence<Item> Args { get; init; }\n"
@@ -97,8 +112,8 @@ public class EndToEndTests
             + "{\n"
             + "    public static string Run()\n"
             + "    {\n"
-            + "        Item[] items = [new Item { Name = \"a\" }, new Item { Name = \"b\" }];\n"
-            + "        return new Holder { Args = Sequence.CommaList(items), Blocks = Sequence.BlankLines(items), Lines = items, Notes = [\"n1\", \"n2\"] }.Render();\n"
+            + "        Item[] items = [new Item(\"a\"), new Item(\"b\")];\n"
+            + "        return Compositor.ResolveTemplate(new Holder { Args = Sequence.CommaList(items), Blocks = Sequence.BlankLines(items), Lines = items, Notes = [\"n1\", \"n2\"] }, \"Holder\");\n"
             + "    }\n"
             + "}\n";
 
@@ -114,9 +129,9 @@ public class EndToEndTests
     {
         var source = "namespace App;\n"
             + "using Templar.Rendering;\n"
-            + "public sealed class Item { }\n"
-            + "public sealed class Holder { public required Sequence<Item> Items { get; init; } }\n"
-            + "public static class Probe { public static string Run() => new Holder { Items = Sequence.Lines(new Item[0]) }.Render(); }\n";
+            + "[Template(\"Item\")] public sealed record Item;\n"
+            + "public sealed record Holder(Sequence<Item> Items);\n"
+            + "public static class Probe { public static string Run() => Compositor.ResolveTemplate(new Holder(Sequence.Lines(new Item[0])), \"Holder\"); }\n";
 
         var rendered = Render(source,
                               ("/proj/Templates/Holder.tpl", "before\n    {{ items }}\nafter"),
@@ -130,12 +145,13 @@ public class EndToEndTests
     {
         var source = "namespace App;\n"
             + "using Templar.Rendering;\n"
-            + "public sealed class Item { public required string Name { get; init; } }\n"
-            + "public sealed class Holder { public required Sequence<Item> Items { get; init; } }\n"
+            + "[Template(\"Item\")] public sealed record Item(string Name);\n"
+            + "public sealed record Holder(Sequence<Item> Items);\n"
             + "public static class Probe\n"
             + "{\n"
-            + "    public static string Run() => new Holder { Items = Sequence.BlankLines([new Item { Name = \"a\" }, new Item { Name = \"b\" }]) }\n"
-            + "        .Render(new RenderOptions { Newline = \"\\r\\n\" });\n"
+            + "    public static string Run() => Compositor.ResolveTemplate(new Holder(Sequence.BlankLines([new Item(\"a\"), new Item(\"b\")])),\n"
+            + "                                                             \"Holder\",\n"
+            + "                                                             new RenderOptions { Newline = \"\\r\\n\" });\n"
             + "}\n";
 
         var rendered = Render(source,
@@ -150,15 +166,13 @@ public class EndToEndTests
     {
         var source = "namespace App;\n"
             + "using Templar.Rendering;\n"
-            + "public sealed class Item { public required string Name { get; init; } }\n"
-            + "public sealed class Holder { public required Sequence<Sequence<Item>> Rows { get; init; } }\n"
+            + "[Template(\"Item\")] public sealed record Item(string Name);\n"
+            + "[Template(\"Holder\")] public sealed record Holder(Sequence<Sequence<Item>> Rows);\n"
             + "public static class Probe\n"
             + "{\n"
-            + "    public static string Run() => new Holder\n"
-            + "    {\n"
-            + "        Rows = Sequence.Lines([Sequence.CommaList([new Item { Name = \"a\" }, new Item { Name = \"b\" }]),\n"
-            + "                               Sequence.CommaList([new Item { Name = \"c\" }, new Item { Name = \"d\" }])]),\n"
-            + "    }.Render();\n"
+            + "    public static string Run() => Compositor.ResolveTemplate(new Holder(\n"
+            + "        Sequence.Lines([Sequence.CommaList([new Item(\"a\"), new Item(\"b\")]),\n"
+            + "                        Sequence.CommaList([new Item(\"c\"), new Item(\"d\")])])));\n"
             + "}\n";
 
         var rendered = Render(source,
@@ -169,20 +183,20 @@ public class EndToEndTests
     }
 
     [Fact]
-    public void Interface_hole_renders_each_value_by_its_runtime_type()
+    public void Interface_spot_renders_each_value_by_its_runtime_type()
     {
         var source = "namespace App;\n"
             + "using Templar.Rendering;\n"
             + "public interface ILine { string Sku { get; } }\n"
-            + "public sealed class Stocked : ILine { public required string Sku { get; init; } }\n"
-            + "public sealed class Backordered : ILine { public required string Sku { get; init; } public required string Eta { get; init; } }\n"
-            + "public sealed class Requisite { public required string Name { get; init; } public required ILine First { get; init; } public required Sequence<ILine> Lines { get; init; } }\n"
+            + "[Template(\"Stocked\")] public sealed record Stocked(string Sku) : ILine;\n"
+            + "[Template(\"Backordered\")] public sealed record Backordered(string Sku, string Eta) : ILine;\n"
+            + "[Template(\"Requisite\")] public sealed record Requisite(string Name, ILine First, Sequence<ILine> Lines);\n"
             + "public static class Probe\n"
             + "{\n"
             + "    public static string Run()\n"
             + "    {\n"
-            + "        ILine[] lines = [new Stocked { Sku = \"A-100\" }, new Backordered { Sku = \"B-200\", Eta = \"May\" }];\n"
-            + "        return new Requisite { Name = \"R-1\", First = lines[1], Lines = Sequence.Lines(lines) }.Render();\n"
+            + "        ILine[] lines = [new Stocked(\"A-100\"), new Backordered(\"B-200\", \"May\")];\n"
+            + "        return Compositor.ResolveTemplate(new Requisite(\"R-1\", lines[1], Sequence.Lines(lines)));\n"
             + "    }\n"
             + "}\n";
 
@@ -196,12 +210,12 @@ public class EndToEndTests
     }
 
     [Fact]
-    public void Interface_hole_holding_an_unregistered_runtime_type_throws()
+    public void Interface_spot_holding_a_runtime_type_with_no_registered_template_throws()
     {
         var library = "namespace App;\n"
             + "public interface IShape { }\n"
-            + "public sealed class Circle : IShape { }\n"
-            + "public sealed class Frame { public required IShape Shape { get; init; } }\n";
+            + "[Templar.Rendering.Template(\"Circle\")] public sealed record Circle : IShape;\n"
+            + "[Templar.Rendering.Template(\"Frame\")] public sealed record Frame(IShape Shape);\n";
         var run = GeneratorHarness.Generate(new[] { library },
                                             new[] { ("/proj/Templates/Frame.tpl", "[{{ shape }}]"), ("/proj/Templates/Circle.tpl", "circle") });
         Assert.Empty(run.Diagnostics);
@@ -210,8 +224,8 @@ public class EndToEndTests
             + "public sealed class Square : App.IShape { }\n"
             + "public static class Probe\n"
             + "{\n"
-            + "    public static string Circle() => App.FrameRenderer.Render(new App.Frame { Shape = new App.Circle() });\n"
-            + "    public static string Square() => App.FrameRenderer.Render(new App.Frame { Shape = new Square() });\n"
+            + "    public static string Circle() => Templar.Rendering.Compositor.ResolveTemplate(new App.Frame(new App.Circle()));\n"
+            + "    public static string Square() => Templar.Rendering.Compositor.ResolveTemplate(new App.Frame(new Square()));\n"
             + "}\n";
         var outsiderCompilation = GeneratorHarness.Compile(new[] { outsider }, run.Output.ToMetadataReference());
         var loaded = GeneratorHarness.LoadTogether(run.Output, outsiderCompilation);
@@ -224,17 +238,31 @@ public class EndToEndTests
     }
 
     [Fact]
+    public void Template_type_from_a_referenced_assembly_renders_by_its_registered_default()
+    {
+        var source = "namespace App;\n"
+            + "using Templar.Rendering;\n"
+            + "[Template(\"Header\")] public sealed record Header(Templar.Presets.Using Import);\n"
+            + "public static class Probe { public static string Run() => Compositor.ResolveTemplate(new Header(new Templar.Presets.Using { Name = \"System\" })); }\n";
+
+        var rendered = Render(source, ("/proj/Templates/Header.tpl", "// header\n{{ import }}"));
+
+        Assert.Equal("// header\nusing System;", rendered);
+    }
+
+    [Fact]
     public void Five_hundred_deep_nesting_renders_without_recursion()
     {
         var source = "namespace App;\n"
-            + "public sealed class Nest { public Nest? Inner { get; init; } public string Leaf { get; init; } = \"\"; }\n"
+            + "using Templar.Rendering;\n"
+            + "[Template(\"Nest\")] public sealed record Nest(Nest? Inner, string Leaf = \"\");\n"
             + "public static class Probe\n"
             + "{\n"
             + "    public static string Run()\n"
             + "    {\n"
-            + "        var nest = new Nest { Leaf = \"X\" };\n"
-            + "        for (int i = 0; i < 500; i++) { nest = new Nest { Inner = nest }; }\n"
-            + "        return nest.Render();\n"
+            + "        var nest = new Nest(null, \"X\");\n"
+            + "        for (int i = 0; i < 500; i++) { nest = new Nest(nest); }\n"
+            + "        return Compositor.ResolveTemplate(nest);\n"
             + "    }\n"
             + "}\n";
 

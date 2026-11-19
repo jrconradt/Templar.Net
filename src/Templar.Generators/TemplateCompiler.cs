@@ -16,12 +16,14 @@ internal static class TemplateCompiler
     {
         public Op Op { get; }
         public string Text { get; }
+        public string? Template { get; }
         public int Line { get; }
 
-        public Node(Op op, string text, int line)
+        public Node(Op op, string text, string? template, int line)
         {
             Op = op;
             Text = text;
+            Template = template;
             Line = line;
         }
     }
@@ -87,6 +89,11 @@ internal static class TemplateCompiler
                 {
                     return new ValidationError(openLine, $"Unsupported '|' in tag at line {openLine}");
                 }
+                if (!markerConsumed && !IsSpot(text.Substring(contentStart, close - contentStart)))
+                {
+                    var spot = text.Substring(contentStart, close - contentStart).Trim();
+                    return new ValidationError(openLine, $"Malformed spot '{spot}' at line {openLine}: a spot is a property name, optionally followed by ': TemplateName'");
+                }
 
                 int afterClose = close + 2;
                 for (int i = p; i < afterClose; i++)
@@ -120,7 +127,7 @@ internal static class TemplateCompiler
         {
             if (lit.Length > 0)
             {
-                nodes.Add(new Node(Op.Lit, lit.ToString(), 0));
+                nodes.Add(new Node(Op.Lit, lit.ToString(), null, 0));
                 lit.Clear();
             }
         }
@@ -187,7 +194,10 @@ internal static class TemplateCompiler
                 }
 
                 FlushLit();
-                nodes.Add(new Node(Op.Val, body, openLine));
+                int colon = body.IndexOf(':');
+                nodes.Add(colon < 0
+                    ? new Node(Op.Val, body, null, openLine)
+                    : new Node(Op.Val, body.Substring(0, colon).Trim(), body.Substring(colon + 1).Trim(), openLine));
                 continue;
             }
 
@@ -201,6 +211,54 @@ internal static class TemplateCompiler
 
         FlushLit();
         return nodes;
+    }
+
+    private static bool IsSpot(string content)
+    {
+        int colon = content.IndexOf(':');
+        if (colon < 0)
+        {
+            return IsPropertyName(content.Trim());
+        }
+        return IsPropertyName(content.Substring(0, colon).Trim())
+            && IsTemplateName(content.Substring(colon + 1).Trim());
+    }
+
+    private static bool IsPropertyName(string name)
+    {
+        if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_'))
+        {
+            return false;
+        }
+        foreach (char c in name)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '_'))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool IsTemplateName(string name)
+    {
+        if (name.Length == 0 || name[0] == '/' || name[name.Length - 1] == '/')
+        {
+            return false;
+        }
+        for (int i = 0; i < name.Length; i++)
+        {
+            char c = name[i];
+            if (char.IsWhiteSpace(c) || c == ':' || c == '\\')
+            {
+                return false;
+            }
+            if (c == '/' && name[i - 1] == '/')
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static string EscapeLiteral(string s)

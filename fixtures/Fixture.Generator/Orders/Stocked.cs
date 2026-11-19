@@ -1,6 +1,6 @@
+using Templar.Rendering;
+
 namespace Fixture.Generator.Orders;
 
-public sealed class Stocked : ILine
-{
-    public required string Sku { get; init; }
-}
+[Template("Orders/Stocked")]
+public sealed record Stocked(string Sku) : ILine;

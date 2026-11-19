@@ -2,4 +2,4 @@ order {{ id }}
 {
     {{ lines }}
 }
-total {{ count }}: {{ tags }}
+total {{ count }}: {{ tags : Orders/Tag }}

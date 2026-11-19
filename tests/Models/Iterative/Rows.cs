@@ -2,7 +2,5 @@ using Templar.Rendering;
 
 namespace Templar.Tests.Models.Iterative;
 
-public sealed class Rows
-{
-    public required Sequence<Sequence<Item>> All { get; init; }
-}
+[Template("Models/Iterative/Rows")]
+public sealed record Rows(Sequence<Sequence<Item>> All);

@@ -1,5 +1,6 @@
+using Templar.Rendering;
+
 namespace Templar.Tests.Models.Swallow;
 
-public sealed class Empty
-{
-}
+[Template("Models/Swallow/Empty")]
+public sealed record Empty;
