@@ -1,9 +1,11 @@
 # Composition
 
-A type is its template. A plain, sealed class or record `X` with `X.tpl` beside
-it is rendered by that template: each hole names a property of `X`, and the
-Templar generator compiles the template into `X`'s renderer at build time, choosing
-each hole's write from the property's declared type. You model what you generate
+A type is its template. A plain, sealed class or record `X` with `X.tpl` under
+`Templates/`, at `X`'s namespace path below the project's root namespace, is
+rendered by that template; `X`'s `.cs` lives wherever the code lives. Each hole
+names a property of `X`, and the Templar generator compiles the template into
+`X`'s renderer at build time, choosing each hole's write from the property's
+declared type. You model what you generate
 as types, build the model, and call `Render()` on the root. The caller never
 selects a template, never fills a hole, never counts, and never assembles code as
 strings; the generated code holds no conditional.
@@ -16,7 +18,7 @@ string-keyed `Template` API underneath see [templates.md](templates.md).
 
 | You have                | You write                                                                      |
 |-------------------------|--------------------------------------------------------------------------------|
-| A thing to generate     | A sealed class or record, with `<TypeName>.tpl` beside it                      |
+| A thing to generate     | A sealed class or record, with `Templates/<namespace path>/<TypeName>.tpl`     |
 | A hole in its template  | A property named for the hole                                                  |
 | A variant of a thing    | An interface, implemented by one sealed type per variant, each with its `.tpl` |
 | Many of a thing         | A `Sequence<T>` (its separator travels with it) or any `IEnumerable<T>`        |
@@ -26,8 +28,8 @@ No base class, no attribute, no `partial`: the type is plain.
 
 ## The smallest example
 
-In a project whose root namespace is `Shop`, each type sits beside its template
-in `Orders/`:
+In a project whose root namespace is `Shop`, the types sit in `Orders/` and their
+templates in `Templates/Orders/`:
 
 ```csharp
 // Orders/Requisite.cs
@@ -42,7 +44,7 @@ public sealed class Requisite
 }
 ```
 
-`Orders/Requisite.tpl`:
+`Templates/Orders/Requisite.tpl`:
 
 ```
 requisite {{ name }}
@@ -59,13 +61,13 @@ public interface ILine
 {
 }
 
-// Orders/Stocked.cs — template Orders/Stocked.tpl: "stocked {{ sku }}"
+// Orders/Stocked.cs — template Templates/Orders/Stocked.tpl: "stocked {{ sku }}"
 public sealed class Stocked : ILine
 {
     public required string Sku { get; init; }
 }
 
-// Orders/Backordered.cs — template Orders/Backordered.tpl:
+// Orders/Backordered.cs — template Templates/Orders/Backordered.tpl:
 //   "backordered {{ sku }}\n    eta {{ eta }}"
 public sealed class Backordered : ILine
 {
@@ -180,7 +182,8 @@ stack.
 ## Worked preset — `CSharpFile`
 
 `Templar.Presets.CSharpFile` is a sealed plain type for `.cs` files with a
-**five-section** template, `CSharpFile.tpl` beside it:
+**five-section** template, `src/Templates/Presets/CSharpFile.tpl` (the type itself
+is in `src/Presets/`):
 
 ```
 {{ header }}
@@ -230,7 +233,7 @@ public sealed class RecordFile
 }
 ```
 
-`RecordFile.tpl`, beside `RecordFile.cs`:
+`RecordFile.tpl`, under `Templates/` at `RecordFile`'s namespace path:
 
 ```
 #nullable enable
@@ -244,7 +247,7 @@ namespace {{ namespace }};
 
 A type-resolved model:
 
-- One sealed class or record per thing generated, its `<TypeName>.tpl` beside it, its namespace following its folder.
+- One sealed class or record per thing generated, its `.cs` wherever the code lives, its template at `Templates/<namespace path below the root namespace>/<TypeName>.tpl`.
 - One readable property per hole — `required` where the hole must be filled.
 - Variants as sealed implementations of an interface, each with its own `.tpl`; holes typed as the interface.
 - Collections as `Sequence<T>` (separator chosen when the model is built) or `IEnumerable<T>`.

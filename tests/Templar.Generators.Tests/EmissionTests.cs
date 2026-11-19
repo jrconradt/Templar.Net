@@ -45,10 +45,10 @@ public class EmissionTests
         return GeneratorHarness.Generate(new[] { Model },
                                          new[]
                                          {
-                                             ("/proj/Card.tpl", CardTemplate),
-                                             ("/proj/Item.tpl", "{{ name }}"),
-                                             ("/proj/Circle.tpl", "circle {{ radius }}"),
-                                             ("/proj/Square.tpl", "square {{ side }}"),
+                                             ("/proj/Templates/Card.tpl", CardTemplate),
+                                             ("/proj/Templates/Item.tpl", "{{ name }}"),
+                                             ("/proj/Templates/Circle.tpl", "circle {{ radius }}"),
+                                             ("/proj/Templates/Square.tpl", "square {{ side }}"),
                                          });
     }
 
@@ -123,8 +123,8 @@ public class EmissionTests
                                             },
                                             new[]
                                             {
-                                                ("/proj/Orders/Requisite.tpl", "requisite {{ name }}\n{\n    {{ lines }}\n}"),
-                                                ("/proj/Orders/Line.tpl", "line {{ sku }}"),
+                                                ("/proj/Templates/Orders/Requisite.tpl", "requisite {{ name }}\n{\n    {{ lines }}\n}"),
+                                                ("/proj/Templates/Orders/Line.tpl", "line {{ sku }}"),
                                             });
 
         Assert.Empty(run.Diagnostics);
@@ -163,7 +163,7 @@ public class EmissionTests
     public void Template_with_no_holes_emits_a_renderer_with_no_writes_but_its_literal()
     {
         var run = GeneratorHarness.Generate(new[] { "namespace App; public sealed class Bare { }" },
-                                            new[] { ("/proj/Bare.tpl", "no placeholders here") });
+                                            new[] { ("/proj/Templates/Bare.tpl", "no placeholders here") });
 
         Assert.Empty(run.Diagnostics);
         var source = run.Sources["App.Bare.g.cs"];

@@ -18,7 +18,7 @@ public class EndToEndTests
             + "public sealed class Greeting { public required string Who { get; init; } public required string Place { get; init; } }\n"
             + "public static class Probe { public static string Run() => new Greeting { Who = \"Ada\", Place = \"Templar\" }.Render(); }\n";
 
-        var rendered = Render(source, ("/proj/Greeting.tpl", "Hello {{ who }}, welcome to {{ place }}!"));
+        var rendered = Render(source, ("/proj/Templates/Greeting.tpl", "Hello {{ who }}, welcome to {{ place }}!"));
 
         var interpreted = Template.Parse("Hello {{ who }}, welcome to {{ place }}!").Set("who", "Ada").Set("place", "Templar").Render();
         Assert.Equal(interpreted, rendered);
@@ -32,7 +32,7 @@ public class EndToEndTests
             + "public sealed class Tricky { public required string X { get; init; } }\n"
             + "public static class Probe { public static string Run() => new Tricky { X = \"value\" }.Render(); }\n";
 
-        var rendered = Render(source, ("/proj/Tricky.tpl", "line1 \"quoted\"\nline2\twith \\{{ escaped {{ x }}"));
+        var rendered = Render(source, ("/proj/Templates/Tricky.tpl", "line1 \"quoted\"\nline2\twith \\{{ escaped {{ x }}"));
 
         Assert.Equal("line1 \"quoted\"\nline2\twith {{ escaped value", rendered);
     }
@@ -45,7 +45,7 @@ public class EndToEndTests
             + "public sealed class Stats { public int Count { get; init; } public double Ratio { get; init; } public bool On { get; init; } public Mode Mode { get; init; } public long? Missing { get; init; } }\n"
             + "public static class Probe { public static string Run() => new Stats { Count = 3, Ratio = 1.5, On = true, Mode = Mode.Slow }.Render(); }\n";
 
-        var rendered = Render(source, ("/proj/Stats.tpl", "{{ count }}|{{ ratio }}|{{ on }}|{{ mode }}|{{ missing }}"));
+        var rendered = Render(source, ("/proj/Templates/Stats.tpl", "{{ count }}|{{ ratio }}|{{ on }}|{{ mode }}|{{ missing }}"));
 
         Assert.Equal("3|1.5|True|Slow|", rendered);
     }
@@ -59,8 +59,8 @@ public class EndToEndTests
             + "public static class Probe { public static string Run() => new Outer { Inside = new Inner { Name = \"x\" } }.Render(); }\n";
 
         var rendered = Render(source,
-                              ("/proj/Outer.tpl", "before\n    {{ inside }}\nafter"),
-                              ("/proj/Inner.tpl", "L1 {{ name }}\nL2"));
+                              ("/proj/Templates/Outer.tpl", "before\n    {{ inside }}\nafter"),
+                              ("/proj/Templates/Inner.tpl", "L1 {{ name }}\nL2"));
 
         Assert.Equal("before\n    L1 x\n    L2\nafter", rendered);
     }
@@ -74,8 +74,8 @@ public class EndToEndTests
             + "public static class Probe { public static string Run() => new Outer().Render(); }\n";
 
         var rendered = Render(source,
-                              ("/proj/Outer.tpl", "before\n    {{ inside }}\nafter"),
-                              ("/proj/Inner.tpl", "inner"));
+                              ("/proj/Templates/Outer.tpl", "before\n    {{ inside }}\nafter"),
+                              ("/proj/Templates/Inner.tpl", "inner"));
 
         Assert.Equal("before\nafter", rendered);
     }
@@ -103,8 +103,8 @@ public class EndToEndTests
             + "}\n";
 
         var rendered = Render(source,
-                              ("/proj/Holder.tpl", "call({{ args }})\n  {{ blocks }}\n  {{ lines }}\n  {{ notes }}"),
-                              ("/proj/Item.tpl", "item {{ name }}"));
+                              ("/proj/Templates/Holder.tpl", "call({{ args }})\n  {{ blocks }}\n  {{ lines }}\n  {{ notes }}"),
+                              ("/proj/Templates/Item.tpl", "item {{ name }}"));
 
         Assert.Equal("call(item a, item b)\n  item a\n\n  item b\n  item a\n  item b\n  n1\n  n2", rendered);
     }
@@ -119,8 +119,8 @@ public class EndToEndTests
             + "public static class Probe { public static string Run() => new Holder { Items = Sequence.Lines(new Item[0]) }.Render(); }\n";
 
         var rendered = Render(source,
-                              ("/proj/Holder.tpl", "before\n    {{ items }}\nafter"),
-                              ("/proj/Item.tpl", "item"));
+                              ("/proj/Templates/Holder.tpl", "before\n    {{ items }}\nafter"),
+                              ("/proj/Templates/Item.tpl", "item"));
 
         Assert.Equal("before\nafter", rendered);
     }
@@ -139,8 +139,8 @@ public class EndToEndTests
             + "}\n";
 
         var rendered = Render(source,
-                              ("/proj/Holder.tpl", "start\n{{ items }}\nend"),
-                              ("/proj/Item.tpl", "{{ name }}"));
+                              ("/proj/Templates/Holder.tpl", "start\n{{ items }}\nend"),
+                              ("/proj/Templates/Item.tpl", "{{ name }}"));
 
         Assert.Equal("start\r\na\r\n\r\nb\r\nend", rendered);
     }
@@ -162,8 +162,8 @@ public class EndToEndTests
             + "}\n";
 
         var rendered = Render(source,
-                              ("/proj/Holder.tpl", "{{ rows }}"),
-                              ("/proj/Item.tpl", "item:{{ name }}"));
+                              ("/proj/Templates/Holder.tpl", "{{ rows }}"),
+                              ("/proj/Templates/Item.tpl", "item:{{ name }}"));
 
         Assert.Equal("item:a, item:b\nitem:c, item:d", rendered);
     }
@@ -187,9 +187,9 @@ public class EndToEndTests
             + "}\n";
 
         var rendered = Render(source,
-                              ("/proj/Requisite.tpl", "requisite {{ name }} first {{ first }}\n{\n    {{ lines }}\n}"),
-                              ("/proj/Stocked.tpl", "stocked {{ sku }}"),
-                              ("/proj/Backordered.tpl", "backordered {{ sku }}\n    eta {{ eta }}"));
+                              ("/proj/Templates/Requisite.tpl", "requisite {{ name }} first {{ first }}\n{\n    {{ lines }}\n}"),
+                              ("/proj/Templates/Stocked.tpl", "stocked {{ sku }}"),
+                              ("/proj/Templates/Backordered.tpl", "backordered {{ sku }}\n    eta {{ eta }}"));
 
         var column = new string(' ', "requisite R-1 first ".Length);
         Assert.Equal("requisite R-1 first backordered B-200\n" + column + "    eta May\n{\n    stocked A-100\n    backordered B-200\n        eta May\n}", rendered);
@@ -203,7 +203,7 @@ public class EndToEndTests
             + "public sealed class Circle : IShape { }\n"
             + "public sealed class Frame { public required IShape Shape { get; init; } }\n";
         var run = GeneratorHarness.Generate(new[] { library },
-                                            new[] { ("/proj/Frame.tpl", "[{{ shape }}]"), ("/proj/Circle.tpl", "circle") });
+                                            new[] { ("/proj/Templates/Frame.tpl", "[{{ shape }}]"), ("/proj/Templates/Circle.tpl", "circle") });
         Assert.Empty(run.Diagnostics);
 
         var outsider = "namespace Outside;\n"
@@ -238,7 +238,7 @@ public class EndToEndTests
             + "    }\n"
             + "}\n";
 
-        var rendered = Render(source, ("/proj/Nest.tpl", "[{{inner}}{{leaf}}]"));
+        var rendered = Render(source, ("/proj/Templates/Nest.tpl", "[{{inner}}{{leaf}}]"));
 
         Assert.Equal(new string('[', 501) + "X" + new string(']', 501), rendered);
     }

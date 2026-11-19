@@ -2,8 +2,8 @@ using Xunit;
 
 namespace Templar.Generators.Tests;
 
-// Fixture.Generator is a source generator whose own model types sit beside their .tpl files and are
-// compiled by Templar.Generators; Fixture.Consumer loads it through the Roslyn analyzer loader with
+// Fixture.Generator is a source generator whose own model types have their .tpl files under Templates/ and
+// are compiled by Templar.Generators; Fixture.Consumer loads it through the Roslyn analyzer loader with
 // Templar.dll beside it (GetDependencyTargetPaths), and the constant it emits is the rendered model.
 public class FixtureConsumerTests
 {

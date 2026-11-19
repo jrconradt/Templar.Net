@@ -14,7 +14,7 @@ public class DiagnosticTests
         return diagnostic;
     }
 
-    private static GeneratorHarness.Run One(string source, string template, string path = "/proj/Card.tpl")
+    private static GeneratorHarness.Run One(string source, string template, string path = "/proj/Templates/Card.tpl")
     {
         return GeneratorHarness.Generate(new[] { source }, new[] { (path, template) });
     }
@@ -30,13 +30,25 @@ public class DiagnosticTests
     }
 
     [Fact]
+    public void Template_outside_the_Templates_folder_reports_TMPLR003()
+    {
+        var run = One("namespace App.Orders; public sealed class Card { }", "card", "/proj/Orders/Card.tpl");
+
+        var diagnostic = Single(run, "TMPLR003");
+        Assert.Equal("Template '/proj/Orders/Card.tpl' is outside the Templates folder '/proj/Templates/', so no type can be resolved for it",
+                     diagnostic.GetMessage());
+        Assert.Equal("/proj/Orders/Card.tpl", diagnostic.Location.GetLineSpan().Path);
+        Assert.Empty(run.Sources);
+    }
+
+    [Fact]
     public void Template_with_no_type_reports_TMPLR004_naming_the_type()
     {
         var run = One("namespace App; public sealed class Other { }", "card");
 
         var diagnostic = Single(run, "TMPLR004");
         Assert.Contains("'App.Card'", diagnostic.GetMessage());
-        Assert.Equal("/proj/Card.tpl", diagnostic.Location.GetLineSpan().Path);
+        Assert.Equal("/proj/Templates/Card.tpl", diagnostic.Location.GetLineSpan().Path);
         Assert.Empty(run.Sources);
     }
 
@@ -60,7 +72,7 @@ public class DiagnosticTests
     [Fact]
     public void Nested_type_reports_TMPLR005()
     {
-        var run = One("namespace App; public static class Outer { public sealed class Card { } }", "card", "/proj/Outer/Card.tpl");
+        var run = One("namespace App; public static class Outer { public sealed class Card { } }", "card", "/proj/Templates/Outer/Card.tpl");
 
         Assert.Contains("nested in 'App.Outer'", Single(run, "TMPLR005").GetMessage());
         Assert.Empty(run.Sources);
@@ -170,7 +182,7 @@ public class DiagnosticTests
             + "public sealed class Card { public required IShape Shape { get; init; } }\n";
 
         var run = GeneratorHarness.Generate(new[] { source },
-                                            new[] { ("/proj/Card.tpl", "{{ shape }}"), ("/proj/Circle.tpl", "circle") });
+                                            new[] { ("/proj/Templates/Card.tpl", "{{ shape }}"), ("/proj/Templates/Circle.tpl", "circle") });
 
         Assert.Contains("'App.Square' has no template", Single(run, "TMPLR008").GetMessage());
     }
