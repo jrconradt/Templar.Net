@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Templar.Rendering;
 
 public sealed class TemplarWriter
@@ -18,6 +20,19 @@ public sealed class TemplarWriter
 
     internal string Result => _output;
 
+    public static string Render<T>(T model,
+                                   Func<TemplarWriter, T, IEnumerator<object?>> steps,
+                                   RenderOptions? options) where T : class
+    {
+        var writer = new TemplarWriter(options ?? new RenderOptions());
+        writer.Frames.Push(new Renderer.CompiledFrame
+        {
+            Steps = steps(writer, model),
+        });
+        Renderer.Drive(writer);
+        return writer.Result;
+    }
+
     public void Literal(string text)
     {
         string nl = Options.Newline;
@@ -27,50 +42,115 @@ public sealed class TemplarWriter
         }
     }
 
-    public IComposable? Value(object? value)
+    public void Text(string? value)
     {
-        MarkExpression();
-        string nl = Options.Newline;
-
-        if (value is null)
-        {
-            return null;
-        }
-        if (value is string sval)
-        {
-            WriteValueString(sval, nl);
-            return null;
-        }
-        if (value is IComposable composable)
-        {
-            return composable;
-        }
-        if (value is IEnumerable<IComposable> comps)
-        {
-            return new Sequence(comps, nl);
-        }
-        if (value is IEnumerable<string> strs)
-        {
-            string joined = string.Join(nl, strs);
-            WriteValueString(joined, nl);
-            return null;
-        }
-        string fallback = value.ToString() ?? "";
-        WriteValueString(fallback, nl);
-        return null;
+        WriteValueString(value ?? "", Options.Newline);
     }
 
-    public void Compiled(IEnumerator<IComposable?> steps)
+    public void Format<T>(T value)
     {
-        Frames.Push(new Renderer.CompiledFrame
+        if (value is null)
         {
-            Steps = steps,
-        });
+            Text(null);
+            return;
+        }
+        if (value is IFormattable formattable)
+        {
+            Text(formattable.ToString(null, CultureInfo.InvariantCulture));
+            return;
+        }
+        Text(value.ToString());
+    }
+
+    public object? Compose<T>(T? model, Func<TemplarWriter, T, IEnumerator<object?>> steps) where T : class
+    {
+        MarkExpression();
+        if (model is null)
+        {
+            return null;
+        }
+        return new Renderer.CompiledFrame
+        {
+            Steps = steps(this, model),
+        };
+    }
+
+    public object? List<T>(Sequence<T>? items, Func<TemplarWriter, T, IEnumerator<object?>> steps)
+    {
+        MarkExpression();
+        if (items is null)
+        {
+            return null;
+        }
+        return new Renderer.SequenceFrame
+        {
+            Items = Each(items.Items, steps),
+            Separator = items.Separator,
+        };
+    }
+
+    public object? List<T>(IEnumerable<T>? items, Func<TemplarWriter, T, IEnumerator<object?>> steps)
+    {
+        MarkExpression();
+        if (items is null)
+        {
+            return null;
+        }
+        return new Renderer.SequenceFrame
+        {
+            Items = Each(items, steps),
+            Separator = "\n",
+        };
+    }
+
+    public static IEnumerator<object?> TextItem(TemplarWriter writer, string? value)
+    {
+        writer.Text(value);
+        yield break;
+    }
+
+    public static IEnumerator<object?> FormatItem<T>(TemplarWriter writer, T value)
+    {
+        writer.Format(value);
+        yield break;
+    }
+
+    public static IEnumerator<object?> ListItem<T>(TemplarWriter writer,
+                                                   Sequence<T> items,
+                                                   Func<TemplarWriter, T, IEnumerator<object?>> steps)
+    {
+        yield return writer.List(items, steps);
+    }
+
+    public static IEnumerator<object?> ListItem<T>(TemplarWriter writer,
+                                                   IEnumerable<T> items,
+                                                   Func<TemplarWriter, T, IEnumerator<object?>> steps)
+    {
+        yield return writer.List(items, steps);
     }
 
     public override string ToString()
     {
         return _output;
+    }
+
+    private IEnumerator<IEnumerator<object?>> Each<T>(IEnumerable<T> items,
+                                                      Func<TemplarWriter, T, IEnumerator<object?>> steps)
+    {
+        foreach (var item in items)
+        {
+            if (item is null)
+            {
+                yield return Nothing();
+                continue;
+            }
+            yield return steps(this, item);
+        }
+    }
+
+    private static IEnumerator<object?> Nothing()
+    {
+        yield break;
     }
 
     internal void MarkExpression()
@@ -149,7 +229,11 @@ public sealed class TemplarWriter
 
     internal void WriteSeparator(string sep)
     {
-        _output += sep;
+        if (sep.Contains('\r'))
+        {
+            sep = sep.Replace("\r\n", "\n").Replace('\r', '\n');
+        }
+        _output += sep.Replace("\n", Options.Newline);
         if (sep.EndsWith('\n'))
         {
             _atLineStart = true;

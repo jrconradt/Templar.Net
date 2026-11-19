@@ -1,52 +1,11 @@
 using Templar.Rendering;
+using Templar.Tests.Models.Compiled;
 using Xunit;
 
 namespace Templar.Tests;
 
 public class CompiledEmitTests
 {
-    private sealed class Greeting : Compositor
-    {
-        public required object? Who { get; init; }
-        public required object? Place { get; init; }
-
-        public override void RenderInto(TemplarWriter w)
-        {
-            w.Compiled(Steps(w));
-        }
-
-        private IEnumerator<IComposable?> Steps(TemplarWriter w)
-        {
-            w.Literal("Hello ");
-            yield return w.Value(Who);
-            w.Literal(" and ");
-            yield return w.Value(Place);
-            w.Literal("!");
-        }
-    }
-
-    private sealed class TwoLines : Compositor
-    {
-        protected override string Structure => "line-a\nline-b";
-    }
-
-    private sealed class Outer : Compositor
-    {
-        public required object? Inside { get; init; }
-
-        public override void RenderInto(TemplarWriter w)
-        {
-            w.Compiled(Steps(w));
-        }
-
-        private IEnumerator<IComposable?> Steps(TemplarWriter w)
-        {
-            w.Literal("before\n    ");
-            yield return w.Value(Inside);
-            w.Literal("\nafter");
-        }
-    }
-
     [Fact]
     public void Compiled_scalar_matches_interpreted()
     {
@@ -59,39 +18,19 @@ public class CompiledEmitTests
     }
 
     [Fact]
-    public void Compiled_nested_compositor_matches_interpreted()
+    public void Compiled_nested_type_matches_interpreted_multiline_value()
     {
         string interpreted = Template.Parse("before\n    {{ inside }}\nafter")
-            .Set("inside", new TwoLines())
+            .Set("inside", "line-a\nline-b")
             .Render();
         string compiled = new Outer { Inside = new TwoLines() }.Render();
         Assert.Equal(interpreted, compiled);
     }
 
-    private sealed class Leaf : Compositor
-    {
-        protected override string Structure => "X";
-    }
-
-    private sealed class Wrap : Compositor
-    {
-        public required object? Inside { get; init; }
-
-        public override void RenderInto(TemplarWriter w)
-        {
-            w.Compiled(Steps(w));
-        }
-
-        private IEnumerator<IComposable?> Steps(TemplarWriter w)
-        {
-            yield return w.Value(Inside);
-        }
-    }
-
     [Fact]
     public void Compiled_deep_nesting_does_not_overflow()
     {
-        Compositor acc = new Leaf();
+        var acc = new Wrap { Leaf = "X" };
         for (int i = 0; i < 5000; i++)
         {
             acc = new Wrap { Inside = acc };

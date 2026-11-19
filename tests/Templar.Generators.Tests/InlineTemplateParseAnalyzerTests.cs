@@ -18,7 +18,7 @@ public class InlineTemplateParseAnalyzerTests
         {
             builder.Add(MetadataReference.CreateFromFile(path));
         }
-        builder.Add(MetadataReference.CreateFromFile(typeof(Compositor).Assembly.Location));
+        builder.Add(MetadataReference.CreateFromFile(typeof(Template).Assembly.Location));
         return builder.ToImmutable();
     }
 
@@ -55,6 +55,14 @@ public class InlineTemplateParseAnalyzerTests
     {
         var diagnostics = Analyze("var t = Template.Parse($\"Hello {variable}\");");
         Assert.Contains(diagnostics, d => d.Id == "TMPLR001");
+    }
+
+    [Fact]
+    public void Message_points_to_a_tpl_beside_the_type_it_renders()
+    {
+        var diagnostics = Analyze("var t = Template.Parse(\"Hello {{ who }}\");");
+        var diagnostic = Assert.Single(diagnostics, d => d.Id == "TMPLR001");
+        Assert.Equal("Move this template literal into a .tpl file beside the type it renders", diagnostic.GetMessage());
     }
 
     [Fact]

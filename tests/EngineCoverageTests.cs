@@ -1,46 +1,21 @@
-using System.Collections.Generic;
 using Templar.Rendering;
+using Templar.Tests.Models.Engine;
 using Xunit;
 
 namespace Templar.Tests;
 
 public class EngineCoverageTests
 {
-    private sealed class Lit : Compositor
+    [Fact]
+    public void Mapped_type_value_at_line_start()
     {
-        public string V { get; init; } = "";
-        protected override string Structure => "{{ v }}";
-    }
-
-    private sealed class NoStructure : Compositor
-    {
-    }
-
-    private sealed class WriteOnlyProp : Compositor
-    {
-        private string _w = "";
-        public string Sink
-        {
-            set => _w = value;
-        }
-        public string Used => _w.Length >= 0 ? "v" : "";
-        protected override string Structure => "{{ used }}";
+        Assert.Equal("hi", new LitHolder { C = new Lit { V = "hi" } }.Render());
     }
 
     [Fact]
-    public void Compositor_value_at_line_start()
+    public void List_value_at_line_start()
     {
-        var t = Template.Parse("{{ c }}");
-        t["c"] = new Lit { V = "hi" };
-        Assert.Equal("hi", t.Render());
-    }
-
-    [Fact]
-    public void Compositor_sequence_value_at_line_start()
-    {
-        var t = Template.Parse("{{ items }}");
-        t["items"] = new List<Compositor> { new Lit { V = "a" }, new Lit { V = "b" } };
-        Assert.Equal("a\nb", t.Render());
+        Assert.Equal("a\nb", new LitList { Items = [new Lit { V = "a" }, new Lit { V = "b" }] }.Render());
     }
 
     [Fact]
@@ -79,26 +54,14 @@ public class EngineCoverageTests
     [Fact]
     public void Empty_sequence_renders_empty()
     {
-        Assert.Equal("", Sequence.Lines([]).Render());
+        Assert.Equal("", new LitSequence { Items = Sequence.Lines(Array.Empty<Lit>()) }.Render());
     }
 
     [Fact]
     public void Comma_list_joins_with_comma_space()
     {
-        var list = Sequence.CommaList(new Compositor[] { new Lit { V = "a" }, new Lit { V = "b" } });
-        Assert.Equal("a, b", list.Render());
-    }
-
-    [Fact]
-    public void Compositor_to_string_renders()
-    {
-        Assert.Equal("hi", new Lit { V = "hi" }.ToString());
-    }
-
-    [Fact]
-    public void Compositor_without_structure_or_resource_throws()
-    {
-        Assert.Throws<System.InvalidOperationException>(() => new NoStructure().Render());
+        var list = Sequence.CommaList(new[] { new Lit { V = "a" }, new Lit { V = "b" } });
+        Assert.Equal("a, b", new LitSequence { Items = list }.Render());
     }
 
     [Fact]
@@ -143,7 +106,7 @@ public class EngineCoverageTests
     [Fact]
     public void Blank_lines_sequence_joins_with_blank_line()
     {
-        var list = Sequence.BlankLines(new Compositor[] { new Lit { V = "a" }, new Lit { V = "b" } });
-        Assert.Equal("a\n\nb", list.Render());
+        var list = Sequence.BlankLines(new[] { new Lit { V = "a" }, new Lit { V = "b" } });
+        Assert.Equal("a\n\nb", new LitSequence { Items = list }.Render());
     }
 }

@@ -12,14 +12,14 @@ internal static class Renderer
 
     internal sealed class SequenceFrame
     {
-        public required IEnumerator<IComposable> Items;
+        public required IEnumerator<IEnumerator<object?>> Items;
         public required string Separator;
         public bool First = true;
     }
 
     internal sealed class CompiledFrame
     {
-        public required IEnumerator<IComposable?> Steps;
+        public required IEnumerator<object?> Steps;
     }
 
     private sealed record IndentPop(string Extra);
@@ -135,31 +135,6 @@ internal static class Renderer
                         writer.WriteValueString(sval, nl);
                         continue;
                     }
-
-                    if (value is IComposable composable)
-                    {
-                        string extra = writer.PushColumnIndent();
-                        writer.Frames.Push(scan);
-                        writer.Frames.Push(new IndentPop(extra));
-                        composable.RenderInto(writer);
-                        current = writer.Frames.Pop();
-                        continue;
-                    }
-
-                    if (value is IEnumerable<IComposable> comps)
-                    {
-                        string extra = writer.PushColumnIndent();
-                        writer.Frames.Push(scan);
-                        writer.Frames.Push(new IndentPop(extra));
-                        writer.Frames.Push(new SequenceFrame
-                        {
-                            Items = comps.GetEnumerator(),
-                            Separator = nl,
-                        });
-                        current = writer.Frames.Pop();
-                        continue;
-                    }
-
                     if (value is IEnumerable<string> strs)
                     {
                         string joined = string.Join(nl, strs);
@@ -194,10 +169,11 @@ internal static class Renderer
                     writer.WriteSeparator(seq.Separator);
                 }
                 seq.First = false;
-                var child = seq.Items.Current;
                 writer.Frames.Push(seq);
-                child.RenderInto(writer);
-                current = writer.Frames.Pop();
+                current = new CompiledFrame
+                {
+                    Steps = seq.Items.Current,
+                };
                 continue;
             }
 
@@ -213,8 +189,7 @@ internal static class Renderer
                     string extra = writer.PushColumnIndent();
                     writer.Frames.Push(compiled);
                     writer.Frames.Push(new IndentPop(extra));
-                    step.RenderInto(writer);
-                    current = writer.Frames.Pop();
+                    current = step;
                     continue;
                 }
                 compiled.Steps.Dispose();

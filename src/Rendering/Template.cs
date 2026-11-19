@@ -1,11 +1,7 @@
-using System.Collections.Concurrent;
-
 namespace Templar.Rendering;
 
 public sealed class Template
 {
-    private static readonly ConcurrentDictionary<string, bool> ValidatedSources = new(StringComparer.Ordinal);
-
     private readonly string _source;
     private readonly Dictionary<string, object?> _values = new(StringComparer.OrdinalIgnoreCase);
     private RenderOptions _options = new();
@@ -18,16 +14,6 @@ public sealed class Template
     public static Template Parse(string text)
     {
         Validate(text);
-        return new(text);
-    }
-
-    internal static Template ParseCached(string text)
-    {
-        if (!ValidatedSources.ContainsKey(text))
-        {
-            Validate(text);
-            ValidatedSources.TryAdd(text, true);
-        }
         return new(text);
     }
 
@@ -146,7 +132,4 @@ public sealed class Template
                                _values,
                                _options);
     }
-
-    internal IDictionary<string, object?> ValuesInternal => _values;
-    internal RenderOptions OptionsInternal => _options;
 }
