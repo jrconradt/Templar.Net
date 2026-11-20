@@ -73,7 +73,8 @@ internal static class GeneratorHarness
                              Compilation Output,
                              GeneratorDriver Driver);
 
-    public static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
+    public static readonly CSharpParseOptions ParseOptions = new CSharpParseOptions(LanguageVersion.Latest)
+        .WithFeatures(new[] { new KeyValuePair<string, string>("InterceptorsNamespaces", "Templar.Generated") });
 
     public static Run Generate(string[] sources,
                                (string Path, string Text)[] templates,

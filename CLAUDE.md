@@ -19,7 +19,10 @@ Templar is a template engine for code generation. Templates are views; objects a
 .tpl files + [Template] types + Compositor.ResolveTemplate call sites
   → RendererGenerator (compile time: reachable (type, template) pairs, each spot bound and its write chosen)
   → <RootNamespace>.Templates.<folders>.<Leaf>Template.Steps — one flat iterator per pair, registered under (type, name)
-Compositor.ResolveTemplate(obj[, "Name"]) → RenderRegistry lookup → Renderer.Drive (iterative frame loop over a TemplarWriter sink) → string
+  → Templar.Interceptors.g.cs — one interceptor per pair a call site resolves to, [InterceptsLocation] on each such call
+Compositor.ResolveTemplate(obj[, "Name"]) → intercepted: TemplarWriter.Render(model, <Pair>Template.Steps, options)
+                                            (not resolved at compile time: RenderRegistry lookup)
+  → Renderer.Drive (iterative frame loop over a TemplarWriter sink) → string
 ```
 
 No `.tpl` is read or parsed at run time; template text is baked into the generated renderers as string literals, and a template no pair reaches is syntax-checked but not compiled in. Rendering is inverted onto a sink: `Renderer.Drive` runs an iterative loop over an explicit `Stack<object>` of `SequenceFrame` / `CompiledFrame`, writing into a `TemplarWriter` that owns the output, indentation, and line-swallow state — so deeply nested object graphs do not consume the call stack.
@@ -28,11 +31,10 @@ No `.tpl` is read or parsed at run time; template text is baked into the generat
 
 - `{{ property }}` — spot, written by the property's declared type
 - `{{ property : Template/Name }}` — spot rendered by the named template (each item, for a list)
-- `{{ : Template/Name }}` — self spot: the object being rendered, rendered by the named template at the spot's column (a sub-view sharing its parent's view model); a cycle of self spots is `TMPLR009`
 - `{{# comment }}` — comment (stripped from output)
 - `\{{`, `\}}`, `\\` — escape sequences (literal delimiters / backslash)
 
-A tag that opens with `{{?`, `{{&`, or `{{>`, contains a `|`, or is neither a property name optionally followed by `: TemplateName` nor `: TemplateName` alone is rejected at compile time (`TMPLR002`).
+A tag that opens with `{{?`, `{{&`, or `{{>`, contains a `|`, or is not a property name optionally followed by `: TemplateName` is rejected at compile time (`TMPLR002`).
 
 Property names are **case-insensitive**. Whitespace-only lines whose spots all rendered empty are swallowed entire (including the trailing newline).
 
@@ -40,10 +42,10 @@ Property names are **case-insensitive**. Whitespace-only lines whose spots all r
 
 | Type | Location | Role |
 |------|----------|------|
-| `RendererGenerator` | `src/Templar.Generators/RendererGenerator.cs` | Incremental generator: `.tpl` AdditionalFiles + settings + compilation → `TemplateResolver.Resolve` → one source per reached template, plus diagnostics. Pipeline outputs are equatable records (`PipelineRecords.cs`: `TemplateFile`, `ProjectSettings`, `Site`, `Finding`, `TemplateOutput`; `EquatableArray<T>`), never symbols, `Compilation` or `Location`. |
-| `TemplateResolver` | `src/Templar.Generators/TemplateResolver.cs` | Declares templates by name; seeds pairs from `[Template]` types and `Compositor.ResolveTemplate` call sites (static type + constant name); binds each pair's spots to properties and chooses each write from the declared type (string → `w.Text`, primitive/enum → `w.Format`, `[Template]` type or `: T` → `w.Compose(v, …Template.Steps)`, self spot `{{ : T }}` → `w.Compose(model, …Template.Steps)` for the same type, `Sequence<T>`/`IEnumerable<T>` → `w.List`, interface/abstract → `w.Compose(v, RenderRegistry.Steps)`, referenced `[Template]` type → `RenderRegistry.Find<T>(name)`), following new pairs; emits one class per template with a `Steps` overload per type and a module initializer registering each pair and each `[Template]` default. Diagnostics `TMPLR002`–`TMPLR009` (`Descriptors.cs`, tracked in `AnalyzerReleases.Unshipped.md`). |
+| `RendererGenerator` | `src/Templar.Generators/RendererGenerator.cs` | Incremental generator: `.tpl` AdditionalFiles + settings + compilation → `TemplateResolver.Resolve` → one source per reached template and one `Templar.Interceptors.g.cs`, plus diagnostics. Pipeline outputs are equatable records (`PipelineRecords.cs`: `TemplateFile`, `ProjectSettings`, `Site`, `Finding`, `TemplateOutput`; `EquatableArray<T>`), never symbols, `Compilation` or `Location`. |
+| `TemplateResolver` | `src/Templar.Generators/TemplateResolver.cs` | Declares templates by name; seeds pairs from `[Template]` types and `Compositor.ResolveTemplate` call sites (static type + constant name); binds each pair's spots to properties and chooses each write from the declared type (string → `w.Text`, primitive/enum → `w.Format`, `[Template]` type or `: T` → `w.Compose(v, …Template.Steps)`, `Sequence<T>`/`IEnumerable<T>` → `w.List`, interface/abstract → `w.Compose(v, RenderRegistry.Steps)`, referenced `[Template]` type → `RenderRegistry.Find<T>(name)`), following new pairs; emits one class per template with a `Steps` overload per type and a module initializer registering each pair and each `[Template]` default; and, for each `ResolveTemplate(obj, "Name")` call and each `ResolveTemplate(obj)` call on a project `[Template]` type, an interceptor in `Templar.Generated` (`[InterceptsLocation]` from `SemanticModel.GetInterceptableLocation`) whose body is `TemplarWriter.Render(model, <Pair>Template.Steps, options)` — calls to the same pair through the same overload share one. Diagnostics `TMPLR002`–`TMPLR008` (`Descriptors.cs`, tracked in `AnalyzerReleases.Unshipped.md`). |
 | `TemplateCompiler`, `TemplateLocation` | `src/Templar.Generators/` | Template validation (including the spot grammar) and parsing; template path → name under `<ProjectDir>/Templates/` (outside it: `TMPLR003`). |
-| `Compositor` | `src/Rendering/Compositor.cs` | Static entry: `ResolveTemplate<T>(T model, string template, RenderOptions? options = null)` and `ResolveTemplate<T>(T model, RenderOptions? options = null)` (by `T`'s `[Template]`, or the runtime type's for an interface/abstract `T`). |
+| `Compositor` | `src/Rendering/Compositor.cs` | Static entry: `ResolveTemplate<T>(T model, string template, RenderOptions? options = null)` and `ResolveTemplate<T>(T model, RenderOptions? options = null)` (by `T`'s `[Template]`, or the runtime type's for an interface/abstract `T`). Call sites the generator resolves to a pair are intercepted; the body (a registry lookup) runs only for the rest. |
 | `TemplateAttribute` | `src/Rendering/TemplateAttribute.cs` | `[Template("Name")]` on a class: its default template. |
 | `TemplarWriter` | `src/Rendering/TemplarWriter.cs` | The render sink — owns output, indentation, line-swallow state, the frame stack, and the public writes generated renderers call (`Literal`, `Text`, `Format`, `Compose`, `List`, the `*Item` steps, static `Render`). `null` and empty lists are handled here, so generated code holds no conditional. |
 | `RenderRegistry` | `src/Rendering/RenderRegistry.cs` | (type, template name) → renderer and type → default name, filled by generated module initializers (`Register`/`RegisterDefault` overwrite); `Find<T>(name)` throws naming both on a miss; `Steps` dispatches an interface-typed value by its runtime type's default, throwing for an unregistered type. The only runtime decisions. |
@@ -63,7 +65,7 @@ A template is a view: it names properties and knows nothing of the data model. A
 
 ### Build wiring
 
-`src/Templar.csproj` references `Templar.Generators` as an analyzer (`OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all"`), lists `Templates/**/*.tpl` as `AdditionalFiles`, and makes `RootNamespace`/`ProjectDir` compiler-visible; `tests/Templar.Tests.csproj` and `fixtures/Fixture.Generator` do the same for their `Templates/` folders. The generator has no reference to Templar.dll. The package ships the generator under `analyzers/dotnet/cs` and build targets exposing `RootNamespace`/`ProjectDir`. `fixtures/Fixture.Generator` (a source generator that renders with `Compositor.ResolveTemplate`, shipping Templar.dll via `GetDependencyTargetPaths`) and `fixtures/Fixture.Consumer` prove the Roslyn analyzer-loader path.
+`src/Templar.csproj` references `Templar.Generators` as an analyzer (`OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all"`), lists `Templates/**/*.tpl` as `AdditionalFiles`, and makes `RootNamespace`/`ProjectDir` compiler-visible; `tests/Templar.Tests.csproj` and `fixtures/Fixture.Generator` do the same for their `Templates/` folders and add `Templar.Generated` to `InterceptorsNamespaces`. The generator has no reference to Templar.dll. The package ships the generator under `analyzers/dotnet/cs` and build targets exposing `RootNamespace`/`ProjectDir` and adding `Templar.Generated` to `InterceptorsNamespaces`. `fixtures/Fixture.Generator` (a source generator that renders with `Compositor.ResolveTemplate`, shipping Templar.dll via `GetDependencyTargetPaths`) and `fixtures/Fixture.Consumer` prove the Roslyn analyzer-loader path.
 
 ### Presets
 
