@@ -38,7 +38,7 @@ public class PairTests
         var run = GeneratorHarness.Generate(new[] { TwoTypes }, new[] { ("/proj/Templates/Card.tpl", "card {{ title }}") });
 
         Assert.Empty(run.Diagnostics);
-        var source = Assert.Single(run.Sources).Value;
+        var source = run.Sources["Card.g.cs"];
         Assert.Contains("Steps(global::Templar.Rendering.TemplarWriter w, global::App.Book model)", source);
         Assert.Contains("Steps(global::Templar.Rendering.TemplarWriter w, global::App.Film model)", source);
         Assert.Contains("RenderRegistry.Register<global::App.Book>(\"Card\", Steps);", source);
@@ -68,46 +68,6 @@ public class PairTests
                               ("/proj/Templates/Injection/Assignment.tpl", "_{{ name }} = {{ name }};"));
 
         Assert.Equal("public Foo(int a, string b)\n{\n    _a = a;\n}", rendered);
-    }
-
-    [Fact]
-    public void A_self_spot_renders_the_object_being_rendered_by_another_template_at_its_column()
-    {
-        var source = "namespace App;\n"
-            + "using Templar.Rendering;\n"
-            + "public sealed record Member(string Type, string Name);\n"
-            + "public sealed record Controller(string Name, Sequence<Member> Parameters);\n"
-            + "public static class Probe\n"
-            + "{\n"
-            + "    public static string Run() => Compositor.ResolveTemplate(new Controller(\"Home\", Sequence.CommaList([new Member(\"int\", \"a\"), new Member(\"string\", \"b\")])), \"Controller\");\n"
-            + "}\n";
-
-        var rendered = Render(source,
-                              ("/proj/Templates/Controller.tpl", "public sealed class {{ name }}\n{\n    {{ : Injection/Constructor }}\n}"),
-                              ("/proj/Templates/Injection/Constructor.tpl", "public {{ name }}({{ parameters : Injection/Parameter }})\n{\n}"),
-                              ("/proj/Templates/Injection/Parameter.tpl", "{{ type }} {{ name }}"));
-
-        Assert.Equal("public sealed class Home\n{\n    public Home(int a, string b)\n    {\n    }\n}", rendered);
-    }
-
-    [Fact]
-    public void A_self_spot_in_a_list_item_template_renders_that_item_by_the_named_template()
-    {
-        var source = "namespace App;\n"
-            + "using Templar.Rendering;\n"
-            + "[Template(\"Field\")] public sealed record Field(string Type, string Name);\n"
-            + "public sealed record Fields(Sequence<Field> All);\n"
-            + "public static class Probe\n"
-            + "{\n"
-            + "    public static string Run() => Compositor.ResolveTemplate(new Fields(Sequence.Lines([new Field(\"int\", \"a\"), new Field(\"string\", \"b\")])), \"Fields\");\n"
-            + "}\n";
-
-        var rendered = Render(source,
-                              ("/proj/Templates/Fields.tpl", "{\n    {{ all }}\n}"),
-                              ("/proj/Templates/Field.tpl", "private readonly {{ : Typed }};"),
-                              ("/proj/Templates/Typed.tpl", "{{ type }} _{{ name }}"));
-
-        Assert.Equal("{\n    private readonly int _a;\n    private readonly string _b;\n}", rendered);
     }
 
     [Fact]

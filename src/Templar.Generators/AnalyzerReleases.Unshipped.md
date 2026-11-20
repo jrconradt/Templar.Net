@@ -9,7 +9,6 @@ TMPLR005 | Templar | Error | Template name is not a constant
 TMPLR006 | Templar | Error | Spot with no property
 TMPLR007 | Templar | Error | Spot matches more than one property
 TMPLR008 | Templar | Error | Type cannot render
-TMPLR009 | Templar | Error | Self spots form a cycle
 
 ### Removed Rules
 

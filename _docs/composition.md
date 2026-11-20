@@ -33,7 +33,6 @@ emits and its diagnostics see [integration.md](integration.md).
 | A root to render | `Compositor.ResolveTemplate(obj, "Template/Name")`, or `Compositor.ResolveTemplate(obj)` when `obj`'s type names its default |
 | A type that usually renders one way | `[Template("Template/Name")]` on the type |
 | A spot that should use a particular template | `{{ property : Template/Name }}` |
-| Part of a view kept in its own template, filled by the same object | `{{ : Template/Name }}` — a self spot |
 | A variant | An interface or abstract class, with `[Template]` on each implementation |
 | Many of a thing | A `Sequence<T>` (its separator travels with it) or any `IEnumerable<T>` |
 | Nothing there | `null` or an empty list — renders nothing; a line left blank is dropped |
@@ -122,59 +121,6 @@ public sealed record Ctor(string Type, Sequence<Member> Parameters, Member Lead)
 list, the named template renders each item. The value's type must carry what the
 named template uses.
 
-## Sub-views: the same object by another template
-
-A self spot, `{{ : Template/Name }}`, names a template and no property: the object
-being rendered is rendered by that template, at the spot's column. In MVVM terms it is
-a sub-view sharing its parent's DataContext — the parent view hands its own view model
-to the child view, and the child binds what it uses from it.
-
-`Templates/Controller.tpl`:
-
-```
-public sealed class {{ name }}
-{
-    {{ : Injection/Constructor }}
-}
-```
-
-`Templates/Injection/Constructor.tpl`:
-
-```
-public {{ name }}({{ parameters : Injection/Parameter }})
-{
-}
-```
-
-`Templates/Injection/Parameter.tpl` is `{{ type }} {{ name }}`.
-
-```csharp
-public sealed record Member(string Type, string Name);
-public sealed record Controller(string Name, Sequence<Member> Parameters);
-
-Compositor.ResolveTemplate(new Controller("Home", Sequence.CommaList([new Member("int", "a"), new Member("string", "b")])), "Controller");
-```
-
-```
-public sealed class Home
-{
-    public Home(int a, string b)
-    {
-    }
-}
-```
-
-The controller carries the properties `Injection/Constructor` uses, so it renders
-through that template where the self spot stands; nothing is copied into a second
-object. The pair (`Controller`, `Injection/Constructor`) is checked like any other: a
-missing property is an error at the self spot, naming the template line. Inside a list
-item's template, a self spot renders that item.
-
-A self spot consumes no data, so self spots that lead back to a template already on
-the path would render the same object forever: that is a compile-time error
-(`TMPLR009`). Recursion through properties — a spot rendering a child of the same
-type — is unaffected.
-
 ## A type's default template
 
 `[Template("Name")]` on a type names the template it renders by when nothing else
@@ -202,8 +148,7 @@ property's **declared** type, once, at compile time:
 
 A `null` value, or an empty list, writes nothing. Anything else — `object`, a type
 with no `[Template]` and no `: T` — is a compile-time error (`TMPLR008`). A property no
-spot names is not rendered. A self spot, `{{ : T }}`, names no property: it writes the
-object itself by template `T`'s renderer for the type being rendered.
+spot names is not rendered.
 
 ## Variants are types
 
@@ -235,8 +180,7 @@ own separator.
 
 The generator starts from every `[Template]` type and every
 `Compositor.ResolveTemplate` call (the static type of the object, and the constant
-template name), and follows each spot to the pairs it reaches — a self spot
-`{{ : Name }}` in a pair (`X`, template) reaches (`X`, `Name`). Each reached pair
+template name), and follows each spot to the pairs it reaches. Each reached pair
 becomes one `Steps` overload in the template's generated class: one `w.Literal(…)` per
 run of text and one write per spot, with no `if` and no loop. Templates no pair
 reaches are syntax-checked and left out. See
@@ -310,7 +254,6 @@ namespace {{ namespace }};
 - Objects as they already are; `[Template]` on a type only where it has a usual template.
 - Roots rendered with `Compositor.ResolveTemplate(obj, "Name")` or `Compositor.ResolveTemplate(obj)`, the name a constant.
 - `{{ x : Name }}` where a spot should use a template other than its value's default.
-- `{{ : Name }}` where part of a view is its own template, filled by the same object.
 - Variants as implementations of an interface or abstract class, each with `[Template]`.
 - Collections as `Sequence<T>` (separator chosen when the object is built) or `IEnumerable<T>`.
 - No string keys filled by hand, no `if`/`switch` choosing a template.

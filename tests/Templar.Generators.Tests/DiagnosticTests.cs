@@ -38,8 +38,7 @@ public class DiagnosticTests
 
     [Theory]
     [InlineData("{{ x : }}")]
-    [InlineData("{{ : }}")]
-    [InlineData("{{ :   }}")]
+    [InlineData("{{ : Card }}")]
     [InlineData("{{ x : Card : Other }}")]
     [InlineData("{{ x : Card/ }}")]
     [InlineData("{{ }}")]
@@ -108,20 +107,6 @@ public class DiagnosticTests
     }
 
     [Fact]
-    public void Self_spot_naming_no_template_reports_TMPLR004_at_the_self_spot()
-    {
-        var source = "namespace App;\n"
-            + "[Templar.Rendering.Template(\"Card\")] public sealed record Card(string Title);\n";
-
-        var run = Generate(source, ("/proj/Templates/Card.tpl", "card\n{{ : Missing }}"));
-
-        var diagnostic = Single(run, "TMPLR004");
-        Assert.Equal("Self spot at line 2 of template 'Card' names template 'Missing', which is not declared under Templates/", diagnostic.GetMessage());
-        Assert.Equal("/proj/Templates/Card.tpl", diagnostic.Location.GetLineSpan().Path);
-        Assert.Equal(1, Start(diagnostic).Line);
-    }
-
-    [Fact]
     public void Non_constant_template_name_reports_TMPLR005_at_the_call_site()
     {
         var source = "namespace App;\n"
@@ -182,61 +167,6 @@ public class DiagnosticTests
         Assert.Equal("Spot 'color' at line 1 of template 'Tag' names no readable property of 'App.Tag'", diagnostic.GetMessage());
         Assert.Equal("/proj/Templates/Card.tpl", diagnostic.Location.GetLineSpan().Path);
         Assert.Equal(1, Start(diagnostic).Line);
-    }
-
-    [Fact]
-    public void Type_missing_a_property_used_by_a_self_spot_template_reports_TMPLR006_at_the_self_spot()
-    {
-        var source = "namespace App;\n"
-            + "[Templar.Rendering.Template(\"Card\")] public sealed record Card(string Title);\n";
-
-        var run = Generate(source,
-                           ("/proj/Templates/Card.tpl", "card\n{{ : Summary }}"),
-                           ("/proj/Templates/Summary.tpl", "{{ title }}\nby {{ author }}"));
-
-        var diagnostic = Single(run, "TMPLR006");
-        Assert.Equal("Spot 'author' at line 2 of template 'Summary' names no readable property of 'App.Card'", diagnostic.GetMessage());
-        Assert.Equal("/proj/Templates/Card.tpl", diagnostic.Location.GetLineSpan().Path);
-        Assert.Equal(1, Start(diagnostic).Line);
-    }
-
-    [Fact]
-    public void Self_spots_forming_a_cycle_through_two_templates_report_TMPLR009()
-    {
-        var source = "namespace App;\n"
-            + "[Templar.Rendering.Template(\"A\")] public sealed record Card(string Title);\n";
-
-        var run = Generate(source,
-                           ("/proj/Templates/A.tpl", "a {{ title }}\n{{ : B }}"),
-                           ("/proj/Templates/B.tpl", "b\n\n{{ : A }}"));
-
-        var diagnostic = Single(run, "TMPLR009");
-        Assert.Equal("Self spots form a cycle: 'A' -> 'B' -> 'A'", diagnostic.GetMessage());
-        Assert.Equal("/proj/Templates/B.tpl", diagnostic.Location.GetLineSpan().Path);
-        Assert.Equal(2, Start(diagnostic).Line);
-    }
-
-    [Fact]
-    public void Self_spot_naming_its_own_template_reports_TMPLR009()
-    {
-        var source = "namespace App;\n"
-            + "[Templar.Rendering.Template(\"A\")] public sealed record Card(string Title);\n";
-
-        var run = Generate(source, ("/proj/Templates/A.tpl", "a {{ title }}\n{{ : A }}"));
-
-        var diagnostic = Single(run, "TMPLR009");
-        Assert.Equal("Self spots form a cycle: 'A' -> 'A'", diagnostic.GetMessage());
-        Assert.Equal("/proj/Templates/A.tpl", diagnostic.Location.GetLineSpan().Path);
-        Assert.Equal(1, Start(diagnostic).Line);
-    }
-
-    [Fact]
-    public void Self_spot_cycle_reports_TMPLR009_even_when_nothing_reaches_it()
-    {
-        var run = Generate("namespace App;", ("/proj/Templates/A.tpl", "{{ : B }}"), ("/proj/Templates/B.tpl", "{{ : A }}"));
-
-        Assert.Equal("Self spots form a cycle: 'A' -> 'B' -> 'A'", Single(run, "TMPLR009").GetMessage());
-        Assert.Empty(run.Sources);
     }
 
     [Theory]

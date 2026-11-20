@@ -10,7 +10,6 @@ internal static class TemplateCompiler
     {
         Lit,
         Val,
-        Self,
     }
 
     public readonly struct Node
@@ -93,7 +92,7 @@ internal static class TemplateCompiler
                 if (!markerConsumed && !IsSpot(text.Substring(contentStart, close - contentStart)))
                 {
                     var spot = text.Substring(contentStart, close - contentStart).Trim();
-                    return new ValidationError(openLine, $"Malformed spot '{spot}' at line {openLine}: a spot is a property name, optionally followed by ': TemplateName', or ': TemplateName' alone");
+                    return new ValidationError(openLine, $"Malformed spot '{spot}' at line {openLine}: a spot is a property name, optionally followed by ': TemplateName'");
                 }
 
                 int afterClose = close + 2;
@@ -196,13 +195,9 @@ internal static class TemplateCompiler
 
                 FlushLit();
                 int colon = body.IndexOf(':');
-                if (colon < 0)
-                {
-                    nodes.Add(new Node(Op.Val, body, null, openLine));
-                    continue;
-                }
-                string property = body.Substring(0, colon).Trim();
-                nodes.Add(new Node(property.Length == 0 ? Op.Self : Op.Val, property, body.Substring(colon + 1).Trim(), openLine));
+                nodes.Add(colon < 0
+                    ? new Node(Op.Val, body, null, openLine)
+                    : new Node(Op.Val, body.Substring(0, colon).Trim(), body.Substring(colon + 1).Trim(), openLine));
                 continue;
             }
 
@@ -225,8 +220,7 @@ internal static class TemplateCompiler
         {
             return IsPropertyName(content.Trim());
         }
-        string property = content.Substring(0, colon).Trim();
-        return (property.Length == 0 || IsPropertyName(property))
+        return IsPropertyName(content.Substring(0, colon).Trim())
             && IsTemplateName(content.Substring(colon + 1).Trim());
     }
 

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Templar.Generators;
@@ -14,6 +15,7 @@ internal sealed class TemplateResolver
 {
     private const string Writer = "global::Templar.Rendering.TemplarWriter";
     private const string Registry = "global::Templar.Rendering.RenderRegistry";
+    private const string InterceptorsHintName = "Templar.Interceptors.g.cs";
     private const string AttributeName = "Templar.Rendering.TemplateAttribute";
     private const string CannotCompose = "it is not a string, primitive, enum, Sequence<T>, IEnumerable<T>, interface, abstract class or type with [Template]; name a template with ': TemplateName'";
 
@@ -57,6 +59,8 @@ internal sealed class TemplateResolver
         public Site Origin { get; }
         public bool Default { get; set; }
         public StringBuilder Body { get; } = new();
+        public List<InterceptableLocation> NamedCalls { get; } = new();
+        public List<InterceptableLocation> DefaultCalls { get; } = new();
     }
 
     private readonly Compilation _compilation;
@@ -126,50 +130,15 @@ internal sealed class TemplateResolver
         {
             foreach (var node in declared.Nodes)
             {
-                if (node.Template is not null && !_templates.ContainsKey(node.Template))
+                if (node.Op == TemplateCompiler.Op.Val && node.Template is not null && !_templates.ContainsKey(node.Template))
                 {
-                    var subject = node.Op == TemplateCompiler.Op.Self ? "Self spot" : $"Spot '{node.Text}'";
                     Report("TMPLR004",
                            Site.Line(declared.Path, node.Line),
-                           $"{subject} at line {node.Line.ToString(CultureInfo.InvariantCulture)} of template '{declared.Name}'",
+                           $"Spot '{node.Text}' at line {node.Line.ToString(CultureInfo.InvariantCulture)} of template '{declared.Name}'",
                            node.Template);
                 }
             }
         }
-
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var declared in _templates.Values.OrderBy(d => d.Name, StringComparer.Ordinal))
-        {
-            if (!visited.Contains(declared.Name))
-            {
-                FollowSelfSpots(declared, new List<string>(), visited);
-            }
-        }
-    }
-
-    private void FollowSelfSpots(Declared template, List<string> path, HashSet<string> visited)
-    {
-        visited.Add(template.Name);
-        path.Add(template.Name);
-        foreach (var node in template.Nodes)
-        {
-            if (node.Op != TemplateCompiler.Op.Self || !_templates.TryGetValue(node.Template!, out var next))
-            {
-                continue;
-            }
-            int start = path.IndexOf(next.Name);
-            if (start >= 0)
-            {
-                var cycle = path.Skip(start).Concat(new[] { next.Name }).Select(n => $"'{n}'");
-                Report("TMPLR009", Site.Line(template.Path, node.Line), string.Join(" -> ", cycle));
-                continue;
-            }
-            if (!visited.Contains(next.Name))
-            {
-                FollowSelfSpots(next, path, visited);
-            }
-        }
-        path.RemoveAt(path.Count - 1);
     }
 
     private void SeedTypes()
@@ -253,6 +222,14 @@ internal sealed class TemplateResolver
             if (reason is not null)
             {
                 Report("TMPLR008", site, type.ToDisplayString(), "as the model of ResolveTemplate", reason);
+                return;
+            }
+            var defaultName = TemplateOf(type);
+            if (defaultName is not null
+                && SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly)
+                && _pairs.TryGetValue(Key(type, defaultName), out var defaultPair))
+            {
+                Intercept(defaultPair.DefaultCalls, invocation, model);
             }
             return;
         }
@@ -281,7 +258,16 @@ internal sealed class TemplateResolver
             return;
         }
 
-        Reach(type, declared, site);
+        Intercept(Reach(type, declared, site).NamedCalls, invocation, model);
+    }
+
+    private void Intercept(List<InterceptableLocation> calls, InvocationExpressionSyntax invocation, SemanticModel model)
+    {
+        var location = model.GetInterceptableLocation(invocation, _ct);
+        if (location is not null)
+        {
+            calls.Add(location);
+        }
     }
 
     private void Bind(Pair pair)
@@ -294,16 +280,6 @@ internal sealed class TemplateResolver
             if (node.Op == TemplateCompiler.Op.Lit)
             {
                 pair.Body.Append("        w.Literal(\"").Append(TemplateCompiler.EscapeLiteral(node.Text)).Append("\");\n");
-                continue;
-            }
-
-            if (node.Op == TemplateCompiler.Op.Self)
-            {
-                if (_templates.TryGetValue(node.Template!, out var named))
-                {
-                    var steps = Reach(pair.Type, named, Site.Line(template.Path, node.Line)).Template.Steps;
-                    pair.Body.Append("        yield return w.Compose(model, ").Append(steps).Append(");\n");
-                }
                 continue;
             }
 
@@ -521,6 +497,13 @@ internal sealed class TemplateResolver
             var pairs = group.OrderBy(p => Qualified(p.Type), StringComparer.Ordinal).ToList();
             outputs.Add(new TemplateOutput(group.Key.HintName, Emit(group.Key, pairs), none));
         }
+        var interceptors = EmitInterceptors(_pairs.Values
+                                                .OrderBy(p => p.Template.Name, StringComparer.Ordinal)
+                                                .ThenBy(p => Qualified(p.Type), StringComparer.Ordinal));
+        if (interceptors.Length > 0)
+        {
+            outputs.Add(new TemplateOutput(InterceptorsHintName, interceptors, none));
+        }
         if (_findings.Count > 0)
         {
             outputs.Add(new TemplateOutput("", "", new EquatableArray<Finding>(_findings)));
@@ -562,6 +545,68 @@ internal sealed class TemplateResolver
         source.Append("    }\n")
               .Append("}\n");
         return source.ToString();
+    }
+
+    private static string EmitInterceptors(IEnumerable<Pair> pairs)
+    {
+        var methods = new StringBuilder();
+        var count = 0;
+        foreach (var pair in pairs)
+        {
+            count = AppendInterceptor(methods, count, pair, pair.NamedCalls, "string template, ");
+            count = AppendInterceptor(methods, count, pair, pair.DefaultCalls, "");
+        }
+        if (count == 0)
+        {
+            return "";
+        }
+
+        var source = new StringBuilder();
+        source.Append("// <auto-generated/>\n")
+              .Append("#nullable enable\n\n")
+              .Append("namespace System.Runtime.CompilerServices\n")
+              .Append("{\n")
+              .Append("    [global::System.AttributeUsage(global::System.AttributeTargets.Method, AllowMultiple = true)]\n")
+              .Append("    file sealed class InterceptsLocationAttribute : global::System.Attribute\n")
+              .Append("    {\n")
+              .Append("        public InterceptsLocationAttribute(int version, string data)\n")
+              .Append("        {\n")
+              .Append("        }\n")
+              .Append("    }\n")
+              .Append("}\n\n")
+              .Append("namespace Templar.Generated\n")
+              .Append("{\n")
+              .Append("    file static class Interceptors\n")
+              .Append("    {\n")
+              .Append(methods)
+              .Append("    }\n")
+              .Append("}\n");
+        return source.ToString();
+    }
+
+    private static int AppendInterceptor(StringBuilder methods, int count, Pair pair, List<InterceptableLocation> calls, string template)
+    {
+        if (calls.Count == 0)
+        {
+            return count;
+        }
+        if (count > 0)
+        {
+            methods.Append('\n');
+        }
+        foreach (var call in calls)
+        {
+            methods.Append("        [global::System.Runtime.CompilerServices.InterceptsLocation(")
+                   .Append(call.Version.ToString(CultureInfo.InvariantCulture))
+                   .Append(", \"").Append(call.Data).Append("\")]\n");
+        }
+        methods.Append("        internal static string ResolveTemplate").Append(count.ToString(CultureInfo.InvariantCulture))
+               .Append('(').Append(Qualified(pair.Type)).Append(" model, ").Append(template)
+               .Append("global::Templar.Rendering.RenderOptions? options = null)\n")
+               .Append("        {\n")
+               .Append("            return ").Append(Writer).Append(".Render(model, ").Append(pair.Template.Steps).Append(", options);\n")
+               .Append("        }\n");
+        return count + 1;
     }
 
     private void Report(string id, Site site, params string[] arguments)
