@@ -11,7 +11,7 @@ internal static class Descriptors
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The .tpl file has an unclosed tag, an unsupported tag marker, or a spot that is not a property name optionally followed by ': TemplateName'.");
+        description: "The .tpl file has an unclosed tag, an unsupported tag marker, or a spot that is not a property name.");
 
     public static readonly DiagnosticDescriptor OutsideTemplates = new(
         id: "TMPLR003",
@@ -29,7 +29,7 @@ internal static class Descriptors
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A [Template] attribute, a ResolveTemplate call or a ': TemplateName' spot names a template, and that name is searched only among the .tpl files under this project's Templates/ folder.");
+        description: "A [Template] attribute or a ResolveTemplate call names a template, and that name is searched only among the .tpl files under this project's Templates/ folder.");
 
     public static readonly DiagnosticDescriptor NotConstant = new(
         id: "TMPLR005",
@@ -65,7 +65,7 @@ internal static class Descriptors
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A value renders as text (string, primitive, enum), by a template (a ': TemplateName' spot, or its type's [Template]), as a list (Sequence<T>, IEnumerable<T>), or by its runtime type's [Template] (an interface or abstract class whose implementations all carry one).");
+        description: "A value renders as text (string, primitive, enum), by its type's [Template], or as a list (Sequence<T>, IEnumerable<T>).");
 
     public static DiagnosticDescriptor ById(string id)
     {

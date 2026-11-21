@@ -41,33 +41,6 @@ public class PairTests
         var source = run.Sources["Card.g.cs"];
         Assert.Contains("Steps(global::Templar.Rendering.TemplarWriter w, global::App.Book model)", source);
         Assert.Contains("Steps(global::Templar.Rendering.TemplarWriter w, global::App.Film model)", source);
-        Assert.Contains("RenderRegistry.Register<global::App.Book>(\"Card\", Steps);", source);
-        Assert.Contains("RenderRegistry.Register<global::App.Film>(\"Card\", Steps);", source);
-    }
-
-    [Fact]
-    public void A_spot_names_the_template_its_value_renders_by()
-    {
-        var source = "namespace App;\n"
-            + "using Templar.Rendering;\n"
-            + "public sealed record Member(string Type, string Name);\n"
-            + "public sealed record Ctor(string Type, Sequence<Member> Parameters, Member Lead);\n"
-            + "public static class Probe\n"
-            + "{\n"
-            + "    public static string Run()\n"
-            + "    {\n"
-            + "        var a = new Member(\"int\", \"a\");\n"
-            + "        var b = new Member(\"string\", \"b\");\n"
-            + "        return Compositor.ResolveTemplate(new Ctor(\"Foo\", Sequence.CommaList([a, b]), a), \"Injection/Constructor\");\n"
-            + "    }\n"
-            + "}\n";
-
-        var rendered = Render(source,
-                              ("/proj/Templates/Injection/Constructor.tpl", "public {{ type }}({{ parameters : Injection/Parameter }})\n{\n    {{ lead : Injection/Assignment }}\n}"),
-                              ("/proj/Templates/Injection/Parameter.tpl", "{{ type }} {{ name }}"),
-                              ("/proj/Templates/Injection/Assignment.tpl", "_{{ name }} = {{ name }};"));
-
-        Assert.Equal("public Foo(int a, string b)\n{\n    _a = a;\n}", rendered);
     }
 
     [Fact]
@@ -105,20 +78,5 @@ public class PairTests
         Assert.Empty(run.Diagnostics);
         Assert.Equal(new[] { "Used.g.cs" }, run.Sources.Keys.ToArray());
         Assert.DoesNotContain(run.Sources.Values, s => s.Contains("Unused") || s.Contains("never"));
-    }
-
-    [Fact]
-    public void A_template_reached_only_through_a_spot_is_compiled_for_the_spot_value_type()
-    {
-        var source = "namespace App;\n"
-            + "public sealed record Tag(string Name);\n"
-            + "[Templar.Rendering.Template(\"Card\")] public sealed record Card(Tag Badge);\n";
-
-        var run = GeneratorHarness.Generate(new[] { source },
-                                            new[] { ("/proj/Templates/Card.tpl", "card {{ badge : Tag }}"), ("/proj/Templates/Tag.tpl", "#{{ name }}") });
-
-        Assert.Empty(run.Diagnostics);
-        Assert.Equal(new[] { "Card.g.cs", "Tag.g.cs" }, run.Sources.Keys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray());
-        Assert.Contains("Steps(global::Templar.Rendering.TemplarWriter w, global::App.Tag model)", run.Sources["Tag.g.cs"]);
     }
 }

@@ -13,8 +13,7 @@ public class FixtureConsumerTests
         var expected = "order R-1\n"
             + "{\n"
             + "    stocked A-100\n"
-            + "    backordered B-200\n"
-            + "        eta May\n"
+            + "    stocked B-200\n"
             + "}\n"
             + "total 2: #rush, #fragile";
 

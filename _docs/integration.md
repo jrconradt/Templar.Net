@@ -17,9 +17,9 @@ folders:
 | `Templates/Orders/Requisite.tpl` | `Orders/Requisite` |
 | `Templates/Injection/Constructor.tpl` | `Injection/Constructor` |
 
-Names are compared exactly (case-sensitive). The name is what `[Template("…")]`,
-`Compositor.ResolveTemplate(obj, "…")` and `{{ x : … }}` refer to, and it is searched
-only among this project's templates. A template's name says nothing about the types it
+Names are compared exactly (case-sensitive). The name is what `[Template("…")]` and
+`Compositor.ResolveTemplate(obj, "…")` refer to, and it is searched only among this
+project's templates. A template's name says nothing about the types it
 renders: those live wherever their code lives, in any namespace. A `.tpl` listed as
 `AdditionalFiles` outside `Templates/` is a compile-time error (`TMPLR003`).
 
@@ -64,31 +64,28 @@ Referencing the projects directly, wire what the package's targets do:
 
 The `InterceptorsNamespaces` entry lets the compiler accept the interceptors generated
 for the project's `ResolveTemplate` calls; without it they are compile errors, and a
-project with no such call does not need it. Templar builds itself this way: its presets are plain types in `src/Presets/` marked
-`[Template]`, their templates in `src/Templates/Presets/`, compiled by its own
-generator. The generator has no reference to `Templar.dll`.
+project with no such call does not need it. The generator has no reference to
+`Templar.dll`.
 
 ## Pairs
 
 The generator compiles (type, template) pairs, starting from:
 
-- every type in the project with `[Template("Name")]` — the pair (type, `Name`), also
-  registered as the type's default;
+- every class or interface in the project with `[Template("Name")]` — the pair (type,
+  `Name`);
 - every `Compositor.ResolveTemplate(obj, "Name")` call — the pair (static type of
   `obj`, `Name`); the name must be a constant;
-- every `Compositor.ResolveTemplate(obj)` call — checked against the static type of
-  `obj`: its `[Template]`, or, for an interface or abstract class, the `[Template]` of
-  every implementation.
+- every `Compositor.ResolveTemplate(obj)` call — the static type of `obj` and its
+  `[Template]`.
 
-From each pair it follows the spots: a `{{ x : Name }}` spot reaches (declared type of
-`x`, `Name`), or (item type, `Name`) for a list; a spot whose type has `[Template]`
-reaches that type's pair. Each pair is checked once — every spot names a readable
+From each pair it follows the spots: a spot whose property's declared type (or item
+type, for a list) has `[Template]` reaches that type's pair. Each pair is checked once — every spot names a readable
 property, and every property's type can render — and errors are reported at the site
 that first reached the pair: the call site, the `[Template]` attribute, or the spot,
 with the template line in the message.
 
-A template no pair reaches is still parsed and checked (`TMPLR002`, `TMPLR003`, and
-`TMPLR004` for its `: Name` spots) but is not compiled in.
+A template no pair reaches is still parsed and checked (`TMPLR002`, `TMPLR003`) but is
+not compiled in.
 
 ## What it generates
 
@@ -136,28 +133,19 @@ internal static class RequisiteTemplate
         w.Literal("\n}");
         yield break;
     }
-
-    [global::System.Runtime.CompilerServices.ModuleInitializer]
-    internal static void Register()
-    {
-        global::Templar.Rendering.RenderRegistry.Register<global::App.Orders.Requisite>("Orders/Requisite", Steps);
-    }
 }
 ```
 
-and `Orders.Line.g.cs`, whose `Register` also calls
-`RenderRegistry.RegisterDefault<global::App.Orders.Line>("Orders/Line")`.
+and `Orders.Line.g.cs`, whose `LineTemplate.Steps` renders a `Line`.
 
 One class per reached template, in `<RootNamespace>.Templates.<folders>`, named
 `<file>Template`; one `Steps` overload per type it renders. Everything generated is
 `internal`. Each spot is one write, chosen from the property's declared type
 ([composition.md](composition.md#how-a-spot-is-written)): `w.Text` for a string,
-`w.Format` for a primitive or enum, `w.Compose(value, …Template.Steps)` for a
-template, `w.List(value, …)` for a list, `w.Compose(value, RenderRegistry.Steps)` for
-an interface or abstract class, and
-`w.Compose(value, RenderRegistry.Find<T>("Name"))` for a `[Template]` type from a
-referenced assembly. The generated code holds no `if`, no loop, and no other
-conditional; `null` and empty lists are handled inside `TemplarWriter`.
+`w.Format` for a primitive or enum, `w.Compose(value, …Template.Steps)` for a type
+with `[Template]`, and `w.List(value, …)` for a list. The generated code holds no
+`if`, no loop, and no other conditional; `null` and empty lists are handled inside
+`TemplarWriter`.
 
 The call site is resolved in place. Alongside the renderers, the generator emits one
 `Templar.Interceptors.g.cs` per project, holding the file-local
@@ -177,14 +165,10 @@ namespace Templar.Generated
 }
 ```
 
-Every `ResolveTemplate(obj, "Name")` call, and every `ResolveTemplate(obj)` call whose
-`T` has its own `[Template]` in the project, is intercepted this way: the compiler
-replaces the call with a method that runs that pair's renderer directly, with no
-registry lookup. The location comes from `SemanticModel.GetInterceptableLocation`.
-Calls that resolve to the same pair through the same overload share one method, with
-one `InterceptsLocation` per call. A `ResolveTemplate(obj)` call whose `T` is an
-interface or abstract class without its own `[Template]`, or a `[Template]` type from
-a referenced assembly, is not intercepted and renders through `RenderRegistry`.
+Every `ResolveTemplate` call is intercepted this way: the compiler replaces the call
+with a method that runs that pair's renderer directly. The location comes from
+`SemanticModel.GetInterceptableLocation`. Calls that resolve to the same pair through
+the same overload share one method, with one `InterceptsLocation` per call.
 
 ## Diagnostics
 
@@ -193,33 +177,24 @@ Each diagnostic is an error in category `Templar`:
 
 | Id | Reported when | Located at |
 |----|---------------|------------|
-| `TMPLR002` | The template is malformed: an unclosed tag, a `\|` inside a tag, a tag that opens with `{{?`, `{{&` or `{{>`, or a spot that is not a property name optionally followed by `: TemplateName`. Nothing is compiled from it. | The template line |
+| `TMPLR002` | The template is malformed: an unclosed tag, a `\|` inside a tag, a tag that opens with `{{?`, `{{&` or `{{>`, or a spot that is not a property name. Nothing is compiled from it. | The template line |
 | `TMPLR003` | The template is outside `<ProjectDir>/Templates/`, so it has no name. | The template |
-| `TMPLR004` | A `[Template]`, a `ResolveTemplate` call or a `: Name` spot names a template that is not declared under `Templates/`. | The attribute, the call's argument, or the spot |
+| `TMPLR004` | A `[Template]` or a `ResolveTemplate` call names a template that is not declared under `Templates/`. | The attribute or the call's argument |
 | `TMPLR005` | The template name passed to `ResolveTemplate` is not a constant. | The call's argument |
 | `TMPLR006` | A spot names no accessible, readable instance property of the type being rendered. | The site that reached the pair; the message names the template line |
 | `TMPLR007` | A spot matches two properties differing only in case. | As `TMPLR006` |
-| `TMPLR008` | A type cannot render: a spot's property is not a string, primitive, enum, `[Template]` type, list or interface/abstract class (and names no template); an implementation of an interface or abstract class has no `[Template]`; `ResolveTemplate(obj)` on a type with no `[Template]`; or a type that generated code cannot name (a value type, an open generic, an anonymous or inaccessible type), including a generic type marked `[Template]`. | The spot's pair site, the call, or the attribute |
+| `TMPLR008` | A type cannot render: a spot's property is not a string, primitive, enum, list or type with `[Template]`; a spot's type, or the type of `ResolveTemplate(obj)`, has a `[Template]` declared in another assembly; `ResolveTemplate(obj)` on a type with no `[Template]`; or a type that generated code cannot name (a value type, an open generic, an anonymous or inaccessible type), including a generic type marked `[Template]`. | The spot's pair site, the call, or the attribute |
 
 A spot that fails `TMPLR006`–`TMPLR008` is left out of the renderer, which is still
 emitted, so the build reports the template error alone.
 
 ## Run time
 
-An intercepted `Compositor.ResolveTemplate` call drives its pair's compiled renderer
-directly. A call that is not intercepted runs `Compositor.ResolveTemplate` itself:
-`ResolveTemplate(obj, "Name", options?)` looks up the renderer registered for
-(`typeof(T)`, `"Name"`) and drives it; `ResolveTemplate(obj, options?)` renders by
-`T`'s registered default, or — for an interface or abstract `T` — by the runtime
-type's default. No template is parsed and no `.tpl` is read: the registry lookups are
-the only run-time decisions.
-
-The registry is process-wide and keyed by type and template name, so a type's default
-registered by its own assembly serves every assembly that renders it. Two assemblies
-that each compile a pair for the same type under the same template name register the
-same key; the last module initializer to run wins (`Register` overwrites). Within an
-assembly, intercepted calls and nested writes call the compiled renderers directly and
-do not go through the registry.
+Every `Compositor.ResolveTemplate` call is intercepted and drives its pair's compiled
+renderer directly; nested writes call the compiled renderers directly too. No template
+is parsed, no `.tpl` is read, and nothing is looked up. `Compositor.ResolveTemplate`'s
+own bodies only throw `InvalidOperationException`, saying the call was not resolved at
+compile time; that happens only in a project the Templar generator does not run on.
 
 ## Inside a source generator
 
@@ -250,15 +225,14 @@ A consuming project references the generator with `OutputItemType="Analyzer"
 ReferenceOutputAssembly="false"`. `fixtures/Fixture.Generator` and
 `fixtures/Fixture.Consumer` in this repository build exactly that: the generator
 renders an `Order` by its `[Template]`, a `ConstantClass` record by a named template,
-and the `CSharpFile` preset by Templar's registered default, and
-`FixtureConsumerTests` asserts the constant the consumer receives.
+and the file around it by its own `SourceFile` template, and `FixtureConsumerTests`
+asserts the constant the consumer receives.
 
 ## Exception model
 
 | Exception | When | Message |
 |-----------|------|---------|
-| `InvalidOperationException` | An interface- or abstract-typed spot (or root) holds a value whose runtime type has no registered default — a type from outside the project. | Names the type. |
-| `InvalidOperationException` | `RenderRegistry.Find<T>(name)` (or a `ResolveTemplate` call in a project the generator did not run on) for a pair that was never registered. | Names the type and the template. |
+| `InvalidOperationException` | A `Compositor.ResolveTemplate` call was not resolved at compile time: the Templar generator does not run on the calling project. | Says the call was not resolved at compile time. |
 
 ## Zero dependencies
 
