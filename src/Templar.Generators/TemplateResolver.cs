@@ -15,6 +15,7 @@ internal sealed class TemplateResolver
 {
     private const string Writer = "global::Templar.Rendering.TemplarWriter";
     private const string InterceptorsHintName = "Templar.Interceptors.g.cs";
+    private const string ResolversHintName = "Templar.Resolvers.g.cs";
     private const string AttributeName = "Templar.Rendering.TemplateAttribute";
     private const string CannotCompose = "it is not a string, primitive, enum, Sequence<T>, IEnumerable<T> or type with [Template]";
 
@@ -44,29 +45,59 @@ internal sealed class TemplateResolver
         public string Steps => $"global::{Namespace}.{ClassName}.Steps";
     }
 
-    private sealed class Pair
+    private abstract class Target
     {
-        public Pair(ITypeSymbol type, Declared template, Site origin)
+        protected Target(ITypeSymbol type)
         {
             Type = type;
+        }
+
+        public ITypeSymbol Type { get; }
+        public List<InterceptableLocation> DefaultCalls { get; } = new();
+        public abstract string Steps { get; }
+    }
+
+    private sealed class Pair : Target
+    {
+        public Pair(ITypeSymbol type, Declared template, Site origin)
+            : base(type)
+        {
             Template = template;
             Origin = origin;
         }
 
-        public ITypeSymbol Type { get; }
         public Declared Template { get; }
         public Site Origin { get; }
         public StringBuilder Body { get; } = new();
         public List<InterceptableLocation> NamedCalls { get; } = new();
-        public List<InterceptableLocation> DefaultCalls { get; } = new();
+        public override string Steps => Template.Steps;
+    }
+
+    private sealed class Resolver : Target
+    {
+        public Resolver(ITypeSymbol type, string ns, List<Pair> arms)
+            : base(type)
+        {
+            Namespace = ns;
+            ClassName = Identifier.Sanitize(type.ToDisplayString()) + "Resolver";
+            Arms = arms;
+        }
+
+        public string Namespace { get; }
+        public string ClassName { get; }
+        public List<Pair> Arms { get; }
+        public override string Steps => $"global::{Namespace}.{ClassName}.Steps";
     }
 
     private readonly Compilation _compilation;
     private readonly string _rootNamespace;
+    private readonly string _resolverNamespace;
     private readonly CancellationToken _ct;
     private readonly INamedTypeSymbol? _sequence;
     private readonly Dictionary<string, Declared> _templates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Pair> _pairs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Resolver> _resolvers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<INamedTypeSymbol>> _candidates = new(StringComparer.Ordinal);
     private readonly Queue<Pair> _pending = new();
     private readonly List<Finding> _findings = new();
     private List<INamedTypeSymbol>? _sourceTypes;
@@ -75,6 +106,10 @@ internal sealed class TemplateResolver
     {
         _compilation = compilation;
         _rootNamespace = rootNamespace;
+        _resolverNamespace = string.Join(".",
+                                         rootNamespace.Split('.')
+                                             .Select(s => Identifier.Escape(Identifier.Sanitize(s)))
+                                             .Concat(new[] { "Templates", "Resolvers" }));
         _ct = ct;
         _sequence = compilation.GetTypeByMetadataName("Templar.Rendering.Sequence`1");
     }
@@ -199,21 +234,19 @@ internal sealed class TemplateResolver
         if (parameter is null)
         {
             string? reason = "it has no [Template]";
-            if (TemplateOf(type) is not null)
+            Target? target = null;
+            if (Composes(type))
             {
-                ComposeSteps(type, out reason);
+                target = Resolve(type, site, out reason);
             }
             if (reason is not null)
             {
                 Report("TMPLR008", site, type.ToDisplayString(), "as the model of ResolveTemplate", reason);
                 return;
             }
-            var defaultName = TemplateOf(type);
-            if (defaultName is not null
-                && SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly)
-                && _pairs.TryGetValue(Key(type, defaultName), out var defaultPair))
+            if (target is not null)
             {
-                Intercept(defaultPair.DefaultCalls, invocation, model);
+                Intercept(target.DefaultCalls, invocation, model);
             }
             return;
         }
@@ -284,7 +317,7 @@ internal sealed class TemplateResolver
 
             var property = matches[0];
             var access = "model." + Identifier.Escape(property.Name);
-            var write = SpotWrite(property.Type, access, out var reason);
+            var write = SpotWrite(property.Type, access, pair.Origin, out var reason);
             if (write is null)
             {
                 if (reason is not null)
@@ -301,7 +334,7 @@ internal sealed class TemplateResolver
         }
     }
 
-    private string? SpotWrite(ITypeSymbol type, string access, out string? reason)
+    private string? SpotWrite(ITypeSymbol type, string access, Site origin, out string? reason)
     {
         reason = null;
         if (type.TypeKind == TypeKind.Error)
@@ -317,11 +350,11 @@ internal sealed class TemplateResolver
         {
             return $"w.Format({access});";
         }
-        if (TemplateOf(type) is null)
+        if (!Composes(type))
         {
             if (TryElement(type, out var element, out reason))
             {
-                var item = ItemSteps(element!, 1, out reason);
+                var item = ItemSteps(element!, 1, origin, out reason);
                 return item is null ? null : $"yield return w.List({access}, {item});";
             }
             if (reason is not null)
@@ -332,11 +365,11 @@ internal sealed class TemplateResolver
             return null;
         }
 
-        var steps = ComposeSteps(type, out reason);
-        return steps is null ? null : $"yield return w.Compose({access}, {steps});";
+        var target = Resolve(type, origin, out reason);
+        return target is null ? null : $"yield return w.Compose({access}, {target.Steps});";
     }
 
-    private string? ItemSteps(ITypeSymbol element, int depth, out string? reason)
+    private string? ItemSteps(ITypeSymbol element, int depth, Site origin, out string? reason)
     {
         reason = null;
         if (element.TypeKind == TypeKind.Error)
@@ -352,11 +385,11 @@ internal sealed class TemplateResolver
         {
             return $"{Writer}.FormatItem<{Qualified(element)}>";
         }
-        if (TemplateOf(element) is null)
+        if (!Composes(element))
         {
             if (TryElement(element, out var inner, out reason))
             {
-                var innerSteps = ItemSteps(inner!, depth + 1, out reason);
+                var innerSteps = ItemSteps(inner!, depth + 1, origin, out reason);
                 if (innerSteps is null)
                 {
                     return null;
@@ -372,30 +405,89 @@ internal sealed class TemplateResolver
             return null;
         }
 
-        var steps = ComposeSteps(element, out reason);
-        if (steps is null && reason is not null)
+        var target = Resolve(element, origin, out reason);
+        if (target is null)
         {
-            reason = $"its items cannot render: {reason}";
-        }
-        return steps;
-    }
-
-    private string? ComposeSteps(ITypeSymbol type, out string? reason)
-    {
-        reason = null;
-        var name = TemplateOf(type);
-        if (name is not null)
-        {
-            if (SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly))
+            if (reason is not null)
             {
-                return _pairs.TryGetValue(Key(type, name), out var pair) ? pair.Template.Steps : null;
+                reason = $"its items cannot render: {reason}";
             }
-            reason = "its [Template] is declared in another assembly";
             return null;
         }
+        return target.Steps;
+    }
 
-        reason = "it has no [Template]";
-        return null;
+    private bool Composes(ITypeSymbol type)
+    {
+        return Owner(type) is not null || Candidates(type).Any(c => Owner(c) is not null);
+    }
+
+    private Target? Resolve(ITypeSymbol type, Site origin, out string? reason)
+    {
+        reason = null;
+        type = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        var own = Owner(type);
+        var candidates = Candidates(type);
+        if (own is not null && candidates.All(c => SymbolEqualityComparer.Default.Equals(Owner(c), own)))
+        {
+            return PairFor(type, own, origin, out reason);
+        }
+
+        if (_resolvers.TryGetValue(Qualified(type), out var resolver))
+        {
+            return resolver;
+        }
+        reason = HostProblem(type);
+        if (reason is not null)
+        {
+            return null;
+        }
+        var arms = new List<Pair>();
+        foreach (var candidate in candidates)
+        {
+            var self = SymbolEqualityComparer.Default.Equals(candidate, type);
+            var owner = Owner(candidate);
+            if (owner is null)
+            {
+                reason = self ? "it has no [Template]" : $"its subtype '{candidate.ToDisplayString()}' has no [Template]";
+                return null;
+            }
+            var pair = PairFor(candidate, owner, origin, out var problem);
+            if (pair is null)
+            {
+                reason = problem;
+                if (problem is not null && !self)
+                {
+                    reason = $"its subtype '{candidate.ToDisplayString()}' cannot render: {problem}";
+                }
+                return null;
+            }
+            arms.Add(pair);
+        }
+        resolver = new Resolver(type, _resolverNamespace, arms);
+        _resolvers[Qualified(type)] = resolver;
+        return resolver;
+    }
+
+    private Pair? PairFor(ITypeSymbol type, INamedTypeSymbol owner, Site origin, out string? problem)
+    {
+        problem = null;
+        if (!SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, _compilation.Assembly))
+        {
+            problem = "its [Template] is declared in another assembly";
+            return null;
+        }
+        var name = TemplateOf(owner)!;
+        if (SymbolEqualityComparer.Default.Equals(type, owner))
+        {
+            return _pairs.TryGetValue(Key(type, name), out var pair) ? pair : null;
+        }
+        if (!_templates.TryGetValue(name, out var declared))
+        {
+            return null;
+        }
+        problem = HostProblem(type);
+        return problem is null ? Reach(type, declared, origin) : null;
     }
 
     private Pair Reach(ITypeSymbol type, Declared template, Site origin)
@@ -420,9 +512,15 @@ internal sealed class TemplateResolver
             var pairs = group.OrderBy(p => Qualified(p.Type), StringComparer.Ordinal).ToList();
             outputs.Add(new TemplateOutput(group.Key.HintName, Emit(group.Key, pairs), none));
         }
+        var resolvers = _resolvers.Values.OrderBy(r => Qualified(r.Type), StringComparer.Ordinal).ToList();
+        if (resolvers.Count > 0)
+        {
+            outputs.Add(new TemplateOutput(ResolversHintName, EmitResolvers(_resolverNamespace, resolvers), none));
+        }
         var interceptors = EmitInterceptors(_pairs.Values
                                                 .OrderBy(p => p.Template.Name, StringComparer.Ordinal)
-                                                .ThenBy(p => Qualified(p.Type), StringComparer.Ordinal));
+                                                .ThenBy(p => Qualified(p.Type), StringComparer.Ordinal),
+                                            resolvers);
         if (interceptors.Length > 0)
         {
             outputs.Add(new TemplateOutput(InterceptorsHintName, interceptors, none));
@@ -459,7 +557,41 @@ internal sealed class TemplateResolver
         return source.ToString();
     }
 
-    private static string EmitInterceptors(IEnumerable<Pair> pairs)
+    private static string EmitResolvers(string ns, List<Resolver> resolvers)
+    {
+        var source = new StringBuilder();
+        source.Append("// <auto-generated/>\n")
+              .Append("#nullable enable\n\n")
+              .Append("namespace ").Append(ns).Append(";\n\n");
+        for (var i = 0; i < resolvers.Count; i++)
+        {
+            if (i > 0)
+            {
+                source.Append('\n');
+            }
+            var resolver = resolvers[i];
+            source.Append("internal static class ").Append(resolver.ClassName).Append('\n')
+                  .Append("{\n")
+                  .Append("    internal static global::System.Collections.Generic.IEnumerator<object?> Steps(")
+                  .Append(Writer).Append(" w, ").Append(Qualified(resolver.Type)).Append(" model)\n")
+                  .Append("    {\n")
+                  .Append("        return model switch\n")
+                  .Append("        {\n");
+            foreach (var arm in resolver.Arms)
+            {
+                source.Append("            ").Append(Qualified(arm.Type)).Append(" m => ").Append(arm.Steps).Append("(w, m),\n");
+            }
+            source.Append("            _ => throw new global::System.InvalidOperationException(\"Type '\" + model.GetType() + \"' was not resolved for '")
+                  .Append(TemplateCompiler.EscapeLiteral(resolver.Type.ToDisplayString()))
+                  .Append("' at compile time.\"),\n")
+                  .Append("        };\n")
+                  .Append("    }\n")
+                  .Append("}\n");
+        }
+        return source.ToString();
+    }
+
+    private static string EmitInterceptors(IEnumerable<Pair> pairs, IEnumerable<Resolver> resolvers)
     {
         var methods = new StringBuilder();
         var count = 0;
@@ -467,6 +599,10 @@ internal sealed class TemplateResolver
         {
             count = AppendInterceptor(methods, count, pair, pair.NamedCalls, "string template, ");
             count = AppendInterceptor(methods, count, pair, pair.DefaultCalls, "");
+        }
+        foreach (var resolver in resolvers)
+        {
+            count = AppendInterceptor(methods, count, resolver, resolver.DefaultCalls, "");
         }
         if (count == 0)
         {
@@ -496,7 +632,7 @@ internal sealed class TemplateResolver
         return source.ToString();
     }
 
-    private static int AppendInterceptor(StringBuilder methods, int count, Pair pair, List<InterceptableLocation> calls, string template)
+    private static int AppendInterceptor(StringBuilder methods, int count, Target target, List<InterceptableLocation> calls, string template)
     {
         if (calls.Count == 0)
         {
@@ -513,10 +649,10 @@ internal sealed class TemplateResolver
                    .Append(", \"").Append(call.Data).Append("\")]\n");
         }
         methods.Append("        internal static string ResolveTemplate").Append(count.ToString(CultureInfo.InvariantCulture))
-               .Append('(').Append(Qualified(pair.Type)).Append(" model, ").Append(template)
+               .Append('(').Append(Qualified(target.Type)).Append(" model, ").Append(template)
                .Append("global::Templar.Rendering.RenderOptions? options = null)\n")
                .Append("        {\n")
-               .Append("            return ").Append(Writer).Append(".Render(model, ").Append(pair.Template.Steps).Append(", options);\n")
+               .Append("            return ").Append(Writer).Append(".Render(model, ").Append(target.Steps).Append(", options);\n")
                .Append("        }\n");
         return count + 1;
     }
@@ -593,6 +729,94 @@ internal sealed class TemplateResolver
     {
         var attribute = AttributeOf(type);
         return attribute is null ? null : NameIn(attribute) ?? "";
+    }
+
+    private static INamedTypeSymbol? Owner(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol named)
+        {
+            return null;
+        }
+        for (INamedTypeSymbol? current = named; current is not null; current = current.BaseType)
+        {
+            if (AttributeOf(current) is not null)
+            {
+                return current;
+            }
+        }
+        foreach (var inherited in named.AllInterfaces)
+        {
+            if (AttributeOf(inherited) is not null)
+            {
+                return inherited;
+            }
+        }
+        return null;
+    }
+
+    private List<INamedTypeSymbol> Candidates(ITypeSymbol type)
+    {
+        var key = Qualified(type);
+        if (_candidates.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+        var result = new List<INamedTypeSymbol>();
+        if (type.WithNullableAnnotation(NullableAnnotation.NotAnnotated) is INamedTypeSymbol named)
+        {
+            if (IsConcrete(named))
+            {
+                result.Add(named);
+            }
+            if (SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, _compilation.Assembly))
+            {
+                result.AddRange(SourceTypes().Where(t => IsConcrete(t) && Derives(t, named)));
+            }
+        }
+        result.Sort(MostDerivedFirst);
+        _candidates[key] = result;
+        return result;
+    }
+
+    private static bool IsConcrete(INamedTypeSymbol type)
+    {
+        return (type.TypeKind == TypeKind.Class || type.TypeKind == TypeKind.Struct) && !type.IsAbstract && !type.IsStatic;
+    }
+
+    private static bool Derives(INamedTypeSymbol type, INamedTypeSymbol from)
+    {
+        if (from.TypeKind == TypeKind.Interface)
+        {
+            return type.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, from));
+        }
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current, from))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int MostDerivedFirst(INamedTypeSymbol a, INamedTypeSymbol b)
+    {
+        var depth = Depth(b) - Depth(a);
+        if (depth != 0)
+        {
+            return depth;
+        }
+        return string.CompareOrdinal(Qualified(a), Qualified(b));
+    }
+
+    private static int Depth(INamedTypeSymbol type)
+    {
+        var depth = 0;
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+        {
+            depth++;
+        }
+        return depth;
     }
 
     private static string? CalledName(ExpressionSyntax expression)

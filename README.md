@@ -119,12 +119,12 @@ Property names are case-insensitive. A line containing only spots that all rende
 |--------------------------|--------|
 | `string` | the text |
 | `bool`, a number, `char`, an enum (or nullable) | invariant-formatted text |
-| a class or interface with `[Template]` in this project | that template, by the property's declared type; the type must carry what it uses |
+| a class or interface of this project with a `[Template]` in its hierarchy | each value by its own type's template: the most-derived `[Template]` in that type's chain; each type must carry what its template uses |
 | `Sequence<T>` | each item by `T`'s write, joined by the sequence's separator |
 | `IEnumerable<T>` | each item by `T`'s write, one per line |
 | `null` or empty | nothing; a line left blank is dropped |
 
-Anything else is a compile error. A string value is never rescanned for spots. The generated renderers hold no conditional and the engine never recurses.
+Anything else is a compile error. A property or list declared as a base type renders each value by the template of the value's own type: at compile time the generator collects every type of the project a value of the base type can be, and emits one type switch over them — the one predicate Templar performs. A concrete type in that set with no `[Template]` in its chain is a compile error. A string value is never rescanned for spots. The generated renderers hold no conditional and the engine never recurses.
 
 See [_docs/composition.md](_docs/composition.md) for the model, and [_docs/integration.md](_docs/integration.md) for names, wiring, what the generator emits, and its diagnostics.
 
@@ -145,7 +145,7 @@ Long-form docs live in [`_docs/`](_docs/):
 
 | Page | Covers |
 |------|--------|
-| [composition.md](_docs/composition.md) | The model: templates are views, objects their view models; how each spot is written, lists, the engine. |
+| [composition.md](_docs/composition.md) | The model: templates are views, objects their view models; how each spot is written, the hierarchy, lists, the engine. |
 | [integration.md](_docs/integration.md) | Template names; wiring; the pairs the generator compiles and what it emits; diagnostics; Templar inside a source generator; exceptions. |
 | [syntax.md](_docs/syntax.md) | Spot, comment, escape, and indentation rules. |
 
