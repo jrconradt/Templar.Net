@@ -14,10 +14,9 @@ namespace Templar.Generators;
 internal sealed class TemplateResolver
 {
     private const string Writer = "global::Templar.Rendering.TemplarWriter";
-    private const string Registry = "global::Templar.Rendering.RenderRegistry";
     private const string InterceptorsHintName = "Templar.Interceptors.g.cs";
     private const string AttributeName = "Templar.Rendering.TemplateAttribute";
-    private const string CannotCompose = "it is not a string, primitive, enum, Sequence<T>, IEnumerable<T>, interface, abstract class or type with [Template]; name a template with ': TemplateName'";
+    private const string CannotCompose = "it is not a string, primitive, enum, Sequence<T>, IEnumerable<T> or type with [Template]";
 
     private sealed class Declared
     {
@@ -57,7 +56,6 @@ internal sealed class TemplateResolver
         public ITypeSymbol Type { get; }
         public Declared Template { get; }
         public Site Origin { get; }
-        public bool Default { get; set; }
         public StringBuilder Body { get; } = new();
         public List<InterceptableLocation> NamedCalls { get; } = new();
         public List<InterceptableLocation> DefaultCalls { get; } = new();
@@ -125,20 +123,6 @@ internal sealed class TemplateResolver
 
             _templates[name] = new Declared(name, file.Path, TemplateCompiler.Parse(file.Text), _rootNamespace);
         }
-
-        foreach (var declared in _templates.Values.OrderBy(d => d.Name, StringComparer.Ordinal))
-        {
-            foreach (var node in declared.Nodes)
-            {
-                if (node.Op == TemplateCompiler.Op.Val && node.Template is not null && !_templates.ContainsKey(node.Template))
-                {
-                    Report("TMPLR004",
-                           Site.Line(declared.Path, node.Line),
-                           $"Spot '{node.Text}' at line {node.Line.ToString(CultureInfo.InvariantCulture)} of template '{declared.Name}'",
-                           node.Template);
-                }
-            }
-        }
     }
 
     private void SeedTypes()
@@ -168,7 +152,7 @@ internal sealed class TemplateResolver
                 continue;
             }
 
-            Reach(type, declared, site).Default = true;
+            Reach(type, declared, site);
         }
     }
 
@@ -215,7 +199,7 @@ internal sealed class TemplateResolver
         if (parameter is null)
         {
             string? reason = "it has no [Template]";
-            if (TemplateOf(type) is not null || (IsVariant(type) && !TryElement(type, out _, out _)))
+            if (TemplateOf(type) is not null)
             {
                 ComposeSteps(type, out reason);
             }
@@ -300,7 +284,7 @@ internal sealed class TemplateResolver
 
             var property = matches[0];
             var access = "model." + Identifier.Escape(property.Name);
-            var write = SpotWrite(property.Type, node.Template, access, Site.Line(template.Path, node.Line), out var reason);
+            var write = SpotWrite(property.Type, access, out var reason);
             if (write is null)
             {
                 if (reason is not null)
@@ -317,35 +301,12 @@ internal sealed class TemplateResolver
         }
     }
 
-    private string? SpotWrite(ITypeSymbol type, string? over, string access, Site spot, out string? reason)
+    private string? SpotWrite(ITypeSymbol type, string access, out string? reason)
     {
         reason = null;
         if (type.TypeKind == TypeKind.Error)
         {
             return null;
-        }
-
-        if (over is not null)
-        {
-            if (!_templates.TryGetValue(over, out var declared))
-            {
-                return null;
-            }
-            if (type.SpecialType != SpecialType.System_String && TryElement(type, out var overElement, out reason))
-            {
-                var overItem = ItemSteps(overElement!, over, spot, 1, out reason);
-                return overItem is null ? null : $"yield return w.List({access}, {overItem});";
-            }
-            if (reason is not null)
-            {
-                return null;
-            }
-            reason = HostProblem(type);
-            if (reason is not null)
-            {
-                return null;
-            }
-            return $"yield return w.Compose({access}, {Reach(type, declared, spot).Template.Steps});";
         }
 
         if (type.SpecialType == SpecialType.System_String)
@@ -360,25 +321,22 @@ internal sealed class TemplateResolver
         {
             if (TryElement(type, out var element, out reason))
             {
-                var item = ItemSteps(element!, null, spot, 1, out reason);
+                var item = ItemSteps(element!, 1, out reason);
                 return item is null ? null : $"yield return w.List({access}, {item});";
             }
             if (reason is not null)
             {
                 return null;
             }
-            if (!IsVariant(type))
-            {
-                reason = CannotCompose;
-                return null;
-            }
+            reason = CannotCompose;
+            return null;
         }
 
         var steps = ComposeSteps(type, out reason);
         return steps is null ? null : $"yield return w.Compose({access}, {steps});";
     }
 
-    private string? ItemSteps(ITypeSymbol element, string? over, Site spot, int depth, out string? reason)
+    private string? ItemSteps(ITypeSymbol element, int depth, out string? reason)
     {
         reason = null;
         if (element.TypeKind == TypeKind.Error)
@@ -386,19 +344,19 @@ internal sealed class TemplateResolver
             return null;
         }
 
-        if (over is null && element.SpecialType == SpecialType.System_String)
+        if (element.SpecialType == SpecialType.System_String)
         {
             return $"{Writer}.TextItem";
         }
-        if (over is null && IsScalar(element))
+        if (IsScalar(element))
         {
             return $"{Writer}.FormatItem<{Qualified(element)}>";
         }
-        if ((over is not null || TemplateOf(element) is null) && element.SpecialType != SpecialType.System_String)
+        if (TemplateOf(element) is null)
         {
             if (TryElement(element, out var inner, out reason))
             {
-                var innerSteps = ItemSteps(inner!, over, spot, depth + 1, out reason);
+                var innerSteps = ItemSteps(inner!, depth + 1, out reason);
                 if (innerSteps is null)
                 {
                     return null;
@@ -410,24 +368,10 @@ internal sealed class TemplateResolver
                 reason = $"its items cannot render: {reason}";
                 return null;
             }
-        }
-
-        if (over is not null)
-        {
-            reason = HostProblem(element);
-            if (reason is not null)
-            {
-                reason = $"its items of type '{element.ToDisplayString()}' cannot render by template '{over}': {reason}";
-                return null;
-            }
-            return Reach(element, _templates[over], spot).Template.Steps;
-        }
-
-        if (TemplateOf(element) is null && !IsVariant(element))
-        {
             reason = $"its items of type '{element.ToDisplayString()}' cannot render: {CannotCompose}";
             return null;
         }
+
         var steps = ComposeSteps(element, out reason);
         if (steps is null && reason is not null)
         {
@@ -446,29 +390,8 @@ internal sealed class TemplateResolver
             {
                 return _pairs.TryGetValue(Key(type, name), out var pair) ? pair.Template.Steps : null;
             }
-            reason = HostProblem(type);
-            if (reason is not null)
-            {
-                return null;
-            }
-            return $"{Registry}.Find<{Qualified(type)}>(\"{TemplateCompiler.EscapeLiteral(name)}\")";
-        }
-
-        if (IsVariant(type))
-        {
-            foreach (var candidate in SourceTypes())
-            {
-                if (candidate.TypeKind == TypeKind.Interface || candidate.IsAbstract || candidate.IsStatic || !Implements(candidate, type))
-                {
-                    continue;
-                }
-                if (TemplateOf(candidate) is null)
-                {
-                    reason = $"its implementation '{candidate.ToDisplayString()}' has no [Template]";
-                    return null;
-                }
-            }
-            return $"{Registry}.Steps";
+            reason = "its [Template] is declared in another assembly";
+            return null;
         }
 
         reason = "it has no [Template]";
@@ -513,37 +436,26 @@ internal sealed class TemplateResolver
 
     private static string Emit(Declared template, List<Pair> pairs)
     {
-        var name = TemplateCompiler.EscapeLiteral(template.Name);
         var source = new StringBuilder();
         source.Append("// <auto-generated/>\n")
               .Append("#nullable enable\n\n")
               .Append("namespace ").Append(template.Namespace).Append(";\n\n")
               .Append("internal static class ").Append(template.ClassName).Append('\n')
               .Append("{\n");
-        foreach (var pair in pairs)
+        for (var i = 0; i < pairs.Count; i++)
         {
-            source.Append("    internal static global::System.Collections.Generic.IEnumerator<object?> Steps(")
-                  .Append(Writer).Append(" w, ").Append(Qualified(pair.Type)).Append(" model)\n")
-                  .Append("    {\n")
-                  .Append(pair.Body)
-                  .Append("        yield break;\n")
-                  .Append("    }\n\n");
-        }
-        source.Append("    [global::System.Runtime.CompilerServices.ModuleInitializer]\n")
-              .Append("    internal static void Register()\n")
-              .Append("    {\n");
-        foreach (var pair in pairs)
-        {
-            source.Append("        ").Append(Registry).Append(".Register<").Append(Qualified(pair.Type))
-                  .Append(">(\"").Append(name).Append("\", Steps);\n");
-            if (pair.Default)
+            if (i > 0)
             {
-                source.Append("        ").Append(Registry).Append(".RegisterDefault<").Append(Qualified(pair.Type))
-                      .Append(">(\"").Append(name).Append("\");\n");
+                source.Append('\n');
             }
+            source.Append("    internal static global::System.Collections.Generic.IEnumerator<object?> Steps(")
+                  .Append(Writer).Append(" w, ").Append(Qualified(pairs[i].Type)).Append(" model)\n")
+                  .Append("    {\n")
+                  .Append(pairs[i].Body)
+                  .Append("        yield break;\n")
+                  .Append("    }\n");
         }
-        source.Append("    }\n")
-              .Append("}\n");
+        source.Append("}\n");
         return source.ToString();
     }
 
@@ -656,27 +568,6 @@ internal sealed class TemplateResolver
         if (type is INamedTypeSymbol named)
         {
             return named.TypeArguments.Any(IsOpen) || (named.ContainingType is not null && IsOpen(named.ContainingType));
-        }
-        return false;
-    }
-
-    private static bool IsVariant(ITypeSymbol type)
-    {
-        return type.TypeKind == TypeKind.Interface || (type.TypeKind == TypeKind.Class && type.IsAbstract);
-    }
-
-    private static bool Implements(INamedTypeSymbol candidate, ITypeSymbol type)
-    {
-        if (type.TypeKind == TypeKind.Interface)
-        {
-            return candidate.AllInterfaces.Contains((INamedTypeSymbol)type, SymbolEqualityComparer.Default);
-        }
-        for (var current = candidate.BaseType; current is not null; current = current.BaseType)
-        {
-            if (SymbolEqualityComparer.Default.Equals(current, type))
-            {
-                return true;
-            }
         }
         return false;
     }

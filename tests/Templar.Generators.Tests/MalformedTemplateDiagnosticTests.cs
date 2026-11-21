@@ -87,7 +87,7 @@ public class MalformedTemplateDiagnosticTests
     [Fact]
     public void Well_formed_template_produces_no_diagnostic_and_emits_source()
     {
-        var run = Run("/proj/Templates/Other.tpl", "Other {{ name : Good }}");
+        var run = Run("/proj/Templates/Other.tpl", "Other {{ name }}");
 
         Assert.Empty(run.Diagnostics);
         Assert.Contains("Good.g.cs", run.Sources.Keys);

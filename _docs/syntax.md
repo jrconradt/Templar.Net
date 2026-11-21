@@ -16,14 +16,6 @@ Property names are **case-insensitive** -- `{{ Name }}` and `{{ name }}` bind th
 
 A `null` value renders as an empty string.
 
-### Naming the template a spot uses
-
-```
-{{ propertyName : Template/Name }}
-```
-
-The value is rendered by the named template — the template's path under `Templates/` without `.tpl` — instead of by its type's default. On a list, each item is rendered by it. The value's type must carry the properties the named template uses.
-
 ## Comments
 
 ```
@@ -34,7 +26,7 @@ Comments are stripped entirely from the output. They produce no whitespace, no n
 
 ## Unsupported tags
 
-A tag that opens with `{{?`, `{{&`, or `{{>`, that contains a `|`, or whose content is not a property name optionally followed by `: Template/Name`, is rejected at compile time: the generator reports `TMPLR002` at the tag's line. Templates are compiled, never parsed at run time.
+A tag that opens with `{{?`, `{{&`, or `{{>`, that contains a `|`, or whose content is not a property name, is rejected at compile time: the generator reports `TMPLR002` at the tag's line. Templates are compiled, never parsed at run time.
 
 ## Literal Text
 

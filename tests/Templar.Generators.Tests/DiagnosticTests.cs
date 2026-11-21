@@ -42,11 +42,21 @@ public class DiagnosticTests
     [InlineData("{{ x : Card : Other }}")]
     [InlineData("{{ x : Card/ }}")]
     [InlineData("{{ }}")]
-    public void Spot_that_is_not_a_property_optionally_naming_a_template_reports_TMPLR002(string spot)
+    public void Spot_that_is_not_a_property_name_reports_TMPLR002(string spot)
     {
         var run = Generate("namespace App;", ("/proj/Templates/Bad.tpl", spot));
 
         Assert.Contains("Malformed spot", Single(run, "TMPLR002").GetMessage());
+    }
+
+    [Fact]
+    public void Spot_naming_a_template_reports_TMPLR002()
+    {
+        var run = Generate("namespace App;", ("/proj/Templates/Card.tpl", "card\n{{ badge : Tag }}"), ("/proj/Templates/Tag.tpl", "#{{ name }}"));
+
+        var diagnostic = Single(run, "TMPLR002");
+        Assert.Equal("Malformed spot 'badge : Tag' at line 2: a spot is a property name", diagnostic.GetMessage());
+        Assert.Equal("/proj/Templates/Card.tpl", diagnostic.Location.GetLineSpan().Path);
     }
 
     [Fact]
@@ -89,21 +99,6 @@ public class DiagnosticTests
         Assert.Equal("ResolveTemplate names template 'Missing', which is not declared under Templates/", diagnostic.GetMessage());
         Assert.Equal(2, Start(diagnostic).Line);
         Assert.Empty(run.Sources);
-    }
-
-    [Fact]
-    public void Spot_naming_no_template_reports_TMPLR004_at_the_spot()
-    {
-        var source = "namespace App;\n"
-            + "public sealed record Tag(string Name);\n"
-            + "[Templar.Rendering.Template(\"Card\")] public sealed record Card(Tag Badge);\n";
-
-        var run = Generate(source, ("/proj/Templates/Card.tpl", "card\n{{ badge : Missing }}"));
-
-        var diagnostic = Single(run, "TMPLR004");
-        Assert.Equal("Spot 'badge' at line 2 of template 'Card' names template 'Missing', which is not declared under Templates/", diagnostic.GetMessage());
-        Assert.Equal("/proj/Templates/Card.tpl", diagnostic.Location.GetLineSpan().Path);
-        Assert.Equal(1, Start(diagnostic).Line);
     }
 
     [Fact]
@@ -150,23 +145,6 @@ public class DiagnosticTests
         var diagnostic = Single(run, "TMPLR006");
         Assert.Contains("'author'", diagnostic.GetMessage());
         Assert.Equal((1, 1), Start(diagnostic));
-    }
-
-    [Fact]
-    public void Type_missing_a_property_used_by_a_spot_template_reports_TMPLR006_at_that_spot()
-    {
-        var source = "namespace App;\n"
-            + "public sealed record Tag(string Name);\n"
-            + "[Templar.Rendering.Template(\"Card\")] public sealed record Card(Tag Badge);\n";
-
-        var run = Generate(source,
-                           ("/proj/Templates/Card.tpl", "card\n{{ badge : Tag }}"),
-                           ("/proj/Templates/Tag.tpl", "#{{ name }} {{ color }}"));
-
-        var diagnostic = Single(run, "TMPLR006");
-        Assert.Equal("Spot 'color' at line 1 of template 'Tag' names no readable property of 'App.Tag'", diagnostic.GetMessage());
-        Assert.Equal("/proj/Templates/Card.tpl", diagnostic.Location.GetLineSpan().Path);
-        Assert.Equal(1, Start(diagnostic).Line);
     }
 
     [Theory]
@@ -218,34 +196,21 @@ public class DiagnosticTests
         Assert.Contains("at spot 'value' (line 1 of template 'Card', property 'Value')", Single(run, "TMPLR008").GetMessage());
     }
 
-    [Fact]
-    public void Interface_spot_with_an_implementation_lacking_Template_reports_TMPLR008()
+    [Theory]
+    [InlineData("public interface IShape { }", "IShape")]
+    [InlineData("public abstract record Shape;", "Shape")]
+    public void Spot_whose_type_has_no_Template_reports_TMPLR008_though_its_implementations_have_one(string declaration, string type)
     {
         var source = "namespace App;\n"
-            + "public interface IShape { }\n"
-            + "[Templar.Rendering.Template(\"Circle\")] public sealed record Circle : IShape;\n"
-            + "public sealed record Square : IShape;\n"
-            + "[Templar.Rendering.Template(\"Card\")] public sealed record Card(IShape Shape);\n";
+            + declaration + "\n"
+            + $"[Templar.Rendering.Template(\"Circle\")] public sealed record Circle : {type};\n"
+            + $"[Templar.Rendering.Template(\"Card\")] public sealed record Card({type} Shape);\n";
 
         var run = Generate(source, ("/proj/Templates/Card.tpl", "{{ shape }}"), ("/proj/Templates/Circle.tpl", "circle"));
 
         var diagnostic = Single(run, "TMPLR008");
-        Assert.Equal("Type 'App.IShape' cannot render at spot 'shape' (line 1 of template 'Card', property 'Shape'): its implementation 'App.Square' has no [Template]",
+        Assert.Equal($"Type 'App.{type}' cannot render at spot 'shape' (line 1 of template 'Card', property 'Shape'): it is not a string, primitive, enum, Sequence<T>, IEnumerable<T> or type with [Template]",
                      diagnostic.GetMessage());
-    }
-
-    [Fact]
-    public void Abstract_spot_with_a_subclass_lacking_Template_reports_TMPLR008()
-    {
-        var source = "namespace App;\n"
-            + "public abstract record Shape;\n"
-            + "[Templar.Rendering.Template(\"Circle\")] public sealed record Circle : Shape;\n"
-            + "public sealed record Square : Shape;\n"
-            + "[Templar.Rendering.Template(\"Card\")] public sealed record Card(System.Collections.Generic.IReadOnlyList<Shape> Shapes);\n";
-
-        var run = Generate(source, ("/proj/Templates/Card.tpl", "{{ shapes }}"), ("/proj/Templates/Circle.tpl", "circle"));
-
-        Assert.Contains("its implementation 'App.Square' has no [Template]", Single(run, "TMPLR008").GetMessage());
     }
 
     [Fact]

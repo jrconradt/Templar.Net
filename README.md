@@ -63,36 +63,28 @@ requisite {{ name }}
 }
 ```
 
-`Templates/Orders/Stocked.tpl` is `stocked {{ sku }}`; `Templates/Orders/Backordered.tpl`:
+`Templates/Orders/Line.tpl`:
 
 ```
-backordered {{ sku }}
-    eta {{ eta }}
+line {{ sku }}
+    qty {{ quantity }}
 ```
 
-The objects are whatever you already have. A type may name the template it renders by default with `[Template]`:
+The objects are whatever you already have. A type that holds a part of the output names that part's template with `[Template]`:
 
 ```csharp
 using Templar.Rendering;
 
-public interface ILine
-{
-    string Sku { get; }
-}
+[Template("Orders/Line")]
+public sealed record Line(string Sku, int Quantity);
 
-[Template("Orders/Stocked")]
-public sealed record Stocked(string Sku) : ILine;
-
-[Template("Orders/Backordered")]
-public sealed record Backordered(string Sku, string Eta) : ILine;
-
-public sealed record Requisite(string Name, Sequence<ILine> Lines);
+public sealed record Requisite(string Name, Sequence<Line> Lines);
 ```
 
 Resolve the root:
 
 ```csharp
-var requisite = new Requisite("R-1", Sequence.Lines<ILine>([new Stocked("A-100"), new Backordered("B-200", "May")]));
+var requisite = new Requisite("R-1", Sequence.Lines([new Line("A-100", 2), new Line("B-200", 5)]));
 
 Console.WriteLine(Compositor.ResolveTemplate(requisite, "Orders/Requisite"));
 ```
@@ -100,26 +92,22 @@ Console.WriteLine(Compositor.ResolveTemplate(requisite, "Orders/Requisite"));
 ```
 requisite R-1
 {
-    stocked A-100
-    backordered B-200
-        eta May
+    line A-100
+        qty 2
+    line B-200
+        qty 5
 }
 ```
 
-At build time the generator sees that `Requisite` is rendered by `Orders/Requisite`, binds `{{ name }}` and `{{ lines }}` to its properties, follows `Sequence<ILine>` to every `ILine` implementation's `[Template]`, and compiles one flat renderer per (type, template) pair it reached, with the template text baked in. Nothing reads a `.tpl` at run time, and a template nothing reaches is not compiled in. A missing property, a template name that isn't declared, or a value that cannot render is a compile error at the call site, the attribute, or the spot.
+At build time the generator sees that `Requisite` is rendered by `Orders/Requisite`, binds `{{ name }}` and `{{ lines }}` to its properties, follows `Sequence<Line>` to `Line`'s `[Template]`, and compiles one flat renderer per (type, template) pair it reached, with the template text baked in. The call is replaced in place by one that runs that renderer. Nothing reads a `.tpl` at run time, and a template nothing reaches is not compiled in. A missing property, a template name that isn't declared, or a value that cannot render is a compile error at the call site, the attribute, or the spot.
 
-The same template renders any type that carries what it uses, and a spot can name the template its value renders by:
-
-```
-public {{ type }}({{ parameters : Injection/Parameter }})
-```
+The template is the contract: it names the properties it uses and does not change for the object. Any type that carries them can fill it, and each such type gets its own renderer.
 
 ## Syntax
 
 | Form | Example | Effect |
 |------|---------|--------|
 | Spot | `{{ name }}` | The property's value, written by its declared type |
-| Spot naming a template | `{{ parameters : Injection/Parameter }}` | The value (or each item) rendered by that template |
 | Comment | `{{# ignored }}` | Stripped entirely from output |
 | Escape | `\{{` · `\}}` · `\\` | Literal `{{`, `}}`, `\` |
 
@@ -131,16 +119,12 @@ Property names are case-insensitive. A line containing only spots that all rende
 |--------------------------|--------|
 | `string` | the text |
 | `bool`, a number, `char`, an enum (or nullable) | invariant-formatted text |
-| a type with `[Template]` | that template |
-| anything, with `{{ x : T }}` | template `T`; the value's type must carry what `T` uses |
-| `Sequence<T>` | each item by `T`'s write (or `: T`), joined by the sequence's separator |
-| `IEnumerable<T>` | each item, one per line |
-| an interface or abstract class | the value's runtime type's `[Template]`; every implementation must have one |
+| a class or interface with `[Template]` in this project | that template, by the property's declared type; the type must carry what it uses |
+| `Sequence<T>` | each item by `T`'s write, joined by the sequence's separator |
+| `IEnumerable<T>` | each item by `T`'s write, one per line |
 | `null` or empty | nothing; a line left blank is dropped |
 
 Anything else is a compile error. A string value is never rescanned for spots. The generated renderers hold no conditional and the engine never recurses.
-
-The `CSharpFile` preset (`[Template("Presets/CSharpFile")]`) renders a `.cs` file's header, pragmas, usings, file-scoped namespace and body: `Compositor.ResolveTemplate(file)`.
 
 See [_docs/composition.md](_docs/composition.md) for the model, and [_docs/integration.md](_docs/integration.md) for names, wiring, what the generator emits, and its diagnostics.
 
@@ -161,7 +145,7 @@ Long-form docs live in [`_docs/`](_docs/):
 
 | Page | Covers |
 |------|--------|
-| [composition.md](_docs/composition.md) | The model: templates are views, objects their view models; how each spot is written, variants, lists, the engine, the `CSharpFile` preset. |
+| [composition.md](_docs/composition.md) | The model: templates are views, objects their view models; how each spot is written, lists, the engine. |
 | [integration.md](_docs/integration.md) | Template names; wiring; the pairs the generator compiles and what it emits; diagnostics; Templar inside a source generator; exceptions. |
 | [syntax.md](_docs/syntax.md) | Spot, comment, escape, and indentation rules. |
 
@@ -176,7 +160,7 @@ dotnet test Templar.slnx
 
 ## Status
 
-Active development; the core rendering API is stable, while the preset surface is still evolving.
+Active development; the core rendering API is stable.
 
 ## License
 

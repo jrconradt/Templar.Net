@@ -3,7 +3,6 @@ using Fixture.Generator.Orders;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
-using Templar.Presets;
 using Templar.Rendering;
 
 namespace Fixture.Generator;
@@ -15,17 +14,13 @@ public sealed class FixtureGenerator : IIncrementalGenerator
     {
         context.RegisterPostInitializationOutput(output =>
         {
-            ILine[] lines = [new Stocked("A-100"), new Backordered("B-200", "May")];
+            Stocked[] lines = [new Stocked("A-100"), new Stocked("B-200")];
             var order = new Order("R-1",
                                   Sequence.Lines(lines),
                                   lines.Length,
                                   Sequence.CommaList([new Tag("rush"), new Tag("fragile")]));
             var constant = new ConstantClass("Emitted", SymbolDisplay.FormatLiteral(Compositor.ResolveTemplate(order), quote: true));
-            var file = new CSharpFile
-            {
-                Namespace = "Fixture.Consumer",
-                Body = Compositor.ResolveTemplate(constant, "ConstantClass"),
-            };
+            var file = new SourceFile("Fixture.Consumer", Compositor.ResolveTemplate(constant, "ConstantClass"));
             output.AddSource("Emitted.g.cs", SourceText.From(Compositor.ResolveTemplate(file), Encoding.UTF8));
         });
     }

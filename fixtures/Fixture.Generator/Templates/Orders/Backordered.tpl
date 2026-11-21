@@ -1,2 +1,0 @@
-backordered {{ sku }}
-    eta {{ eta }}

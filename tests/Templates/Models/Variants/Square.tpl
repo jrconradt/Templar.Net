@@ -1,2 +1,0 @@
-square
-    side={{ side }}

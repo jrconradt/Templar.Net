@@ -20,7 +20,6 @@ public class TemplateNameTests
         var source = run.Sources["Widgets.Forms.Button.g.cs"];
         Assert.Contains("namespace App.Templates.Widgets.Forms;", source);
         Assert.Contains("internal static class ButtonTemplate", source);
-        Assert.Contains("RenderRegistry.Register<global::App.Button>(\"Widgets/Forms/Button\", Steps);", source);
     }
 
     [Fact]
@@ -61,7 +60,6 @@ public class TemplateNameTests
         Assert.Empty(run.Diagnostics);
         var source = run.Sources["my_widgets.Button.g.cs"];
         Assert.Contains("namespace App.Templates.my_widgets;", source);
-        Assert.Contains("(\"my-widgets/Button\", Steps);", source);
     }
 
     [Fact]
