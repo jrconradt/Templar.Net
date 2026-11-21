@@ -65,7 +65,7 @@ internal static class Descriptors
         category: "Templar",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A value renders as text (string, primitive, enum), by its type's [Template], or as a list (Sequence<T>, IEnumerable<T>).");
+        description: "A value renders as text (string, primitive, enum), as a list (Sequence<T>, IEnumerable<T>), or by [Template] through its declared type's hierarchy: every concrete type of this project a value of the declared type can be renders by the most-derived [Template] in its own chain, and each must have one.");
 
     public static DiagnosticDescriptor ById(string id)
     {

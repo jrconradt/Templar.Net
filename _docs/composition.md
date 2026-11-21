@@ -19,7 +19,8 @@ Templates are views; objects are their view models.
 
 It is MVVM without the boilerplate: no `INotifyPropertyChanged`, no converters, no
 template selectors, no binding paths, no code-behind. A spot binds a property by
-name, and the property's declared type decides how it is written.
+name, and the property's declared type, through its hierarchy, decides how it is
+written.
 
 For spot rules see [syntax.md](syntax.md); for names, wiring, what the generator
 emits and its diagnostics see [integration.md](integration.md).
@@ -32,6 +33,7 @@ emits and its diagnostics see [integration.md](integration.md).
 | Data to render it with | Nothing new: any type whose readable properties the template's spots name |
 | A root to render | `Compositor.ResolveTemplate(obj, "Template/Name")`, or `Compositor.ResolveTemplate(obj)` when `obj`'s type names its template |
 | A type that holds a part of the output | `[Template("Template/Name")]` on the type (a class or an interface) |
+| Several kinds of a thing | A base type and its subtypes, each kind with its own `[Template]` (or its base's) |
 | Many of a thing | A `Sequence<T>` (its separator travels with it) or any `IEnumerable<T>` |
 | Nothing there | `null` or an empty list — renders nothing; a line left blank is dropped |
 
@@ -101,10 +103,58 @@ for a root. The name is searched only among this project's templates, and a
 `[Template]` type declared in another assembly cannot render here (`TMPLR008`). The
 type stays plain otherwise: no base class, no interface, no `partial`.
 
-The template is bound by the property's declared type, at compile time. On an
-interface it binds the interface's own properties, so a property typed as that
-interface renders by the interface's template whatever object it holds. Nothing is
-chosen at run time.
+## The hierarchy
+
+A property or list declared as a base type renders each value by the template of the
+value's own type. At compile time the generator collects every type of this project a
+value of the declared type can be: the type itself if it is concrete, and every
+concrete class or record that derives from it or implements it. Each one renders by the
+most-derived `[Template]` in its own chain — its own, else its base class's, else an
+interface's — so a subtype without one inherits its base's, and an abstract class or
+interface in between lends its `[Template]` to the types below it.
+
+`Templates/Orders/Stocked.tpl` is `stocked {{ sku }}`; `Templates/Orders/Backordered.tpl`
+is `backordered {{ sku }}` and `    eta {{ eta }}` on two lines.
+
+```csharp
+public interface ILine { string Sku { get; } }
+
+[Template("Orders/Stocked")]
+public sealed record Stocked(string Sku) : ILine;
+
+[Template("Orders/Backordered")]
+public sealed record Backordered(string Sku, string Eta) : ILine;
+
+public sealed record Requisite(string Name, Sequence<ILine> Lines);
+
+ILine[] lines = [new Stocked("A-100"), new Backordered("B-200", "May")];
+
+Compositor.ResolveTemplate(new Requisite("R-1", Sequence.Lines(lines)), "Orders/Requisite");
+```
+
+```
+requisite R-1
+{
+    stocked A-100
+    backordered B-200
+        eta May
+}
+```
+
+When every type a value can be resolves to the declared type's own template — a type
+with `[Template]` and no subtypes, or a base whose subtypes add no `[Template]` of their
+own — the spot is a direct call to that pair's renderer, binding the declared type's
+properties. Otherwise the generator emits a **resolver** for the declared type: a type
+switch with one arm per type, each calling that type's renderer, and each type is
+checked against its template like any pair. The resolver is the one predicate Templar
+performs: type resolution over a closed set the compiler knows, in its own generated
+file, with no `if` on values, no loop and no lookup. `Compositor.ResolveTemplate(obj)`
+on a base-typed variable resolves the same way; `Compositor.ResolveTemplate(obj,
+"Name")` renders by the named template, checked against the static type.
+
+A concrete type in the set with no `[Template]` in its chain is a compile-time error
+(`TMPLR008`) at the spot, naming that type. Only a declared type of this project
+collects subtypes: a property typed `object` is still an error.
 
 ## How a spot is written
 
@@ -116,12 +166,13 @@ property's **declared** type, once, at compile time:
 |---------------|-------|
 | `string` | Text; continuation lines take the spot's column. Never rescanned — a `{{ x }}` inside a value is output as written. |
 | `bool`, `char`, a numeric type, an enum, or one of these nullable | Text, formatted with the invariant culture (`ToString()` for `bool` and `char`). |
-| A class or interface with `[Template]`, declared in this project | That template's renderer for the type, at the spot's column. |
+| A class or interface of this project with a `[Template]` in its hierarchy | Each value by its own type's template ([the hierarchy](#the-hierarchy)), at the spot's column. |
 | `Sequence<T>` | Each item by `T`'s write, joined by the sequence's separator. |
 | `IEnumerable<T>` (a list, an array, …) | Each item by `T`'s write, one per line. |
 
 A `null` value, or an empty list, writes nothing. Anything else — `object`, a type
-with no `[Template]`, a `[Template]` type from another assembly — is a compile-time
+with no `[Template]` in its hierarchy, a `[Template]` type from another assembly, a
+type with a concrete subtype that has no `[Template]` in its chain — is a compile-time
 error (`TMPLR008`). A property no spot names is not rendered.
 
 ## Lists
@@ -146,9 +197,10 @@ The generator starts from every `[Template]` type and every
 `Compositor.ResolveTemplate` call (the static type of the object, and the constant
 template name), and follows each spot to the pairs it reaches. Each reached pair
 becomes one `Steps` overload in the template's generated class: one `w.Literal(…)` per
-run of text and one write per spot, with no `if` and no loop. Templates no pair
-reaches are syntax-checked and left out. See
-[integration.md](integration.md#what-it-generates) for an emission.
+run of text and one write per spot, with no `if` and no loop. A declared type that
+resolves to several templates gets one resolver, its type switch, in
+`Templar.Resolvers.g.cs`. Templates no pair reaches are syntax-checked and left out.
+See [integration.md](integration.md#what-it-generates) for an emission.
 
 ## The engine
 

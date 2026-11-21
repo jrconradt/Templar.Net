@@ -81,6 +81,26 @@ public class EmissionTests
         Assert.Contains("        w.Literal(\"card \\\"\");\n", source);
     }
 
+    internal static readonly SyntaxKind[] Forbidden =
+    {
+        SyntaxKind.IfStatement,
+        SyntaxKind.SwitchStatement,
+        SyntaxKind.SwitchExpression,
+        SyntaxKind.ConditionalExpression,
+        SyntaxKind.CoalesceExpression,
+        SyntaxKind.CoalesceAssignmentExpression,
+        SyntaxKind.ConditionalAccessExpression,
+        SyntaxKind.IsPatternExpression,
+        SyntaxKind.IsExpression,
+        SyntaxKind.LogicalAndExpression,
+        SyntaxKind.LogicalOrExpression,
+        SyntaxKind.ForStatement,
+        SyntaxKind.ForEachStatement,
+        SyntaxKind.WhileStatement,
+        SyntaxKind.DoStatement,
+        SyntaxKind.GotoStatement,
+    };
+
     [Fact]
     public void Emitted_renderers_hold_no_conditional_and_no_loop()
     {
@@ -89,30 +109,11 @@ public class EmissionTests
         Assert.Equal(new[] { "Card.g.cs", "Item.g.cs", "Tag.g.cs", "Templar.Interceptors.g.cs" },
                      run.Sources.Keys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray());
 
-        var forbidden = new[]
-        {
-            SyntaxKind.IfStatement,
-            SyntaxKind.SwitchStatement,
-            SyntaxKind.SwitchExpression,
-            SyntaxKind.ConditionalExpression,
-            SyntaxKind.CoalesceExpression,
-            SyntaxKind.CoalesceAssignmentExpression,
-            SyntaxKind.ConditionalAccessExpression,
-            SyntaxKind.IsPatternExpression,
-            SyntaxKind.IsExpression,
-            SyntaxKind.LogicalAndExpression,
-            SyntaxKind.LogicalOrExpression,
-            SyntaxKind.ForStatement,
-            SyntaxKind.ForEachStatement,
-            SyntaxKind.WhileStatement,
-            SyntaxKind.DoStatement,
-            SyntaxKind.GotoStatement,
-        };
         foreach (var (hint, text) in run.Sources)
         {
             var root = CSharpSyntaxTree.ParseText(text, GeneratorHarness.ParseOptions).GetRoot();
             var found = root.DescendantNodesAndSelf()
-                .Where(n => forbidden.Contains(n.Kind()))
+                .Where(n => Forbidden.Contains(n.Kind()))
                 .Select(n => $"{hint}: {n.Kind()} `{n}`")
                 .ToList();
             Assert.True(found.Count == 0, string.Join("\n", found));

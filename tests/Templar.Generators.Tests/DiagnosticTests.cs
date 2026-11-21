@@ -199,17 +199,18 @@ public class DiagnosticTests
     [Theory]
     [InlineData("public interface IShape { }", "IShape")]
     [InlineData("public abstract record Shape;", "Shape")]
-    public void Spot_whose_type_has_no_Template_reports_TMPLR008_though_its_implementations_have_one(string declaration, string type)
+    public void Spot_whose_type_has_a_concrete_subtype_with_no_Template_reports_TMPLR008_naming_it(string declaration, string type)
     {
         var source = "namespace App;\n"
             + declaration + "\n"
             + $"[Templar.Rendering.Template(\"Circle\")] public sealed record Circle : {type};\n"
+            + $"public sealed record Square : {type};\n"
             + $"[Templar.Rendering.Template(\"Card\")] public sealed record Card({type} Shape);\n";
 
         var run = Generate(source, ("/proj/Templates/Card.tpl", "{{ shape }}"), ("/proj/Templates/Circle.tpl", "circle"));
 
         var diagnostic = Single(run, "TMPLR008");
-        Assert.Equal($"Type 'App.{type}' cannot render at spot 'shape' (line 1 of template 'Card', property 'Shape'): it is not a string, primitive, enum, Sequence<T>, IEnumerable<T> or type with [Template]",
+        Assert.Equal($"Type 'App.{type}' cannot render at spot 'shape' (line 1 of template 'Card', property 'Shape'): its subtype 'App.Square' has no [Template]",
                      diagnostic.GetMessage());
     }
 

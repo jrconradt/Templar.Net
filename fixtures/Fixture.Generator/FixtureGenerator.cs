@@ -14,7 +14,7 @@ public sealed class FixtureGenerator : IIncrementalGenerator
     {
         context.RegisterPostInitializationOutput(output =>
         {
-            Stocked[] lines = [new Stocked("A-100"), new Stocked("B-200")];
+            ILine[] lines = [new Stocked("A-100"), new Backordered("B-200", "May")];
             var order = new Order("R-1",
                                   Sequence.Lines(lines),
                                   lines.Length,
