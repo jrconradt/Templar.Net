@@ -119,12 +119,12 @@ Property names are case-insensitive. A line containing only spots that all rende
 |--------------------------|--------|
 | `string` | the text |
 | `bool`, a number, `char`, an enum (or nullable) | invariant-formatted text |
-| a class or interface of this project with a `[Template]` in its hierarchy | each value by its own type's template: the most-derived `[Template]` in that type's chain; each type must carry what its template uses |
+| a class or interface with a `[Template]` in its chain or, when it is of this project or of a referenced assembly that carries template text, in the chain of a subtype collected for it | each value by its own type's template: the most-derived `[Template]` in that type's chain; each type must carry what its template uses |
 | `Sequence<T>` | each item by `T`'s write, joined by the sequence's separator |
 | `IEnumerable<T>` | each item by `T`'s write, one per line |
 | `null` or empty | nothing; a line left blank is dropped |
 
-Anything else is a compile error. A property or list declared as a base type renders each value by the template of the value's own type: at compile time the generator collects every type of the project a value of the base type can be, and emits one type switch over them — the one predicate Templar performs. A concrete type in that set with no `[Template]` in its chain is a compile error. A string value is never rescanned for spots. The generated renderers hold no conditional and the engine never recurses.
+Anything else is a compile error. A property or list declared as a base type renders each value by the template of the value's own type: at compile time the generator collects the base type if concrete and, when it is declared in the project or in a referenced assembly that carries template text, its concrete subtypes of the project and, for the latter, of that assembly, and emits one type switch over them — the one predicate Templar performs. A concrete type in that set with no `[Template]` in its chain is a compile error, and so is a type whose `[Template]` is declared in an assembly that carries no text for its template. A string value is never rescanned for spots. The generated renderers hold no conditional and the engine never recurses.
 
 See [_docs/composition.md](_docs/composition.md) for the model, and [_docs/integration.md](_docs/integration.md) for names, wiring, what the generator emits, and its diagnostics.
 

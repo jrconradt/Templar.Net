@@ -76,7 +76,7 @@ public class PairTests
                                             new[] { ("/proj/Templates/Used.tpl", "used {{ title }}"), ("/proj/Templates/Unused.tpl", "never {{ title }}") });
 
         Assert.Empty(run.Diagnostics);
-        Assert.Equal(new[] { "Used.g.cs" }, run.Sources.Keys.ToArray());
+        Assert.Equal(new[] { "Templar.Templates.g.cs", "Used.g.cs" }, run.Sources.Keys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray());
         Assert.DoesNotContain(run.Sources.Values, s => s.Contains("Unused") || s.Contains("never"));
     }
 }

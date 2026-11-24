@@ -39,6 +39,7 @@ the syntax sits underneath:
 |--------------------------------------|-------------------------------------------|
 | `Compositor` (`ResolveTemplate`)     | `src/Rendering/Compositor.cs`             |
 | `TemplateAttribute`                  | `src/Rendering/TemplateAttribute.cs`      |
+| `TemplateTextAttribute` (a template's text, written into the assembly) | `src/Rendering/TemplateTextAttribute.cs` |
 | `TemplarWriter` (the render sink and the writes generated renderers call) | `src/Rendering/TemplarWriter.cs` |
 | `Sequence<T>` (+ `Sequence.Lines` / `BlankLines` / `CommaList`) | `src/Rendering/Sequence.cs` |
 | `RenderOptions`                      | `src/Rendering/RenderOptions.cs`          |

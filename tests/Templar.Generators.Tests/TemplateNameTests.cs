@@ -16,7 +16,7 @@ public class TemplateNameTests
                                             new[] { ("/proj/Templates/Widgets/Forms/Button.tpl", "{{ label }}") });
 
         Assert.Empty(run.Diagnostics);
-        Assert.Equal(new[] { "Widgets.Forms.Button.g.cs" }, run.Sources.Keys.ToArray());
+        Assert.Equal(new[] { "Templar.Templates.g.cs", "Widgets.Forms.Button.g.cs" }, run.Sources.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray());
         var source = run.Sources["Widgets.Forms.Button.g.cs"];
         Assert.Contains("namespace App.Templates.Widgets.Forms;", source);
         Assert.Contains("internal static class ButtonTemplate", source);

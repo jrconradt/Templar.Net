@@ -16,28 +16,37 @@ internal sealed class TemplateResolver
     private const string Writer = "global::Templar.Rendering.TemplarWriter";
     private const string InterceptorsHintName = "Templar.Interceptors.g.cs";
     private const string ResolversHintName = "Templar.Resolvers.g.cs";
+    private const string TemplatesHintName = "Templar.Templates.g.cs";
     private const string AttributeName = "Templar.Rendering.TemplateAttribute";
+    private const string TextAttributeName = "Templar.Rendering.TemplateTextAttribute";
     private const string CannotCompose = "it is not a string, primitive, enum, Sequence<T>, IEnumerable<T> or type with [Template]";
 
     private sealed class Declared
     {
-        public Declared(string name, string path, List<TemplateCompiler.Node> nodes, string rootNamespace)
+        public Declared(string name, string path, string text, string rootNamespace, string? assembly = null)
         {
             Name = name;
             Path = path;
-            Nodes = nodes;
-            var segments = name.Split('/').Select(Identifier.Sanitize).ToList();
+            Text = text;
+            Nodes = TemplateCompiler.Parse(text);
+            var prefix = assembly is null ? Array.Empty<string>() : assembly.Split('.');
+            var segments = prefix
+                .Concat(name.Split('/'))
+                .Select(Identifier.Sanitize)
+                .ToList();
             Namespace = string.Join(".",
                                     rootNamespace.Split('.')
                                         .Select(s => Identifier.Escape(Identifier.Sanitize(s)))
                                         .Concat(new[] { "Templates" })
                                         .Concat(segments.Take(segments.Count - 1).Select(Identifier.Escape)));
-            ClassName = segments[segments.Count - 1] + "Template";
+            var leaf = assembly is null ? segments[segments.Count - 1] : string.Join("_", segments);
+            ClassName = leaf + "Template";
             HintName = string.Join(".", segments) + ".g.cs";
         }
 
         public string Name { get; }
         public string Path { get; }
+        public string Text { get; }
         public List<TemplateCompiler.Node> Nodes { get; }
         public string Namespace { get; }
         public string ClassName { get; }
@@ -95,12 +104,14 @@ internal sealed class TemplateResolver
     private readonly CancellationToken _ct;
     private readonly INamedTypeSymbol? _sequence;
     private readonly Dictionary<string, Declared> _templates = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Pair> _pairs = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _named = new(StringComparer.Ordinal);
+    private readonly Dictionary<IAssemblySymbol, Dictionary<string, Declared>> _carried = new(SymbolEqualityComparer.Default);
+    private readonly Dictionary<(string Type, Declared Template), Pair> _pairs = new();
     private readonly Dictionary<string, Resolver> _resolvers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<INamedTypeSymbol>> _candidates = new(StringComparer.Ordinal);
     private readonly Queue<Pair> _pending = new();
     private readonly List<Finding> _findings = new();
-    private List<INamedTypeSymbol>? _sourceTypes;
+    private readonly Dictionary<IAssemblySymbol, List<INamedTypeSymbol>> _sourceTypes = new(SymbolEqualityComparer.Default);
 
     private TemplateResolver(Compilation compilation, string rootNamespace, CancellationToken ct)
     {
@@ -156,13 +167,13 @@ internal sealed class TemplateResolver
                 continue;
             }
 
-            _templates[name] = new Declared(name, file.Path, TemplateCompiler.Parse(file.Text), _rootNamespace);
+            _templates[name] = new Declared(name, file.Path, file.Text, _rootNamespace);
         }
     }
 
     private void SeedTypes()
     {
-        foreach (var type in SourceTypes())
+        foreach (var type in SourceTypes(_compilation.Assembly))
         {
             var attribute = AttributeOf(type);
             if (attribute is null)
@@ -179,6 +190,8 @@ internal sealed class TemplateResolver
                 Report("TMPLR004", site, $"[Template] on '{type.ToDisplayString()}'", name ?? "");
                 continue;
             }
+
+            _named.Add(name);
 
             var problem = HostProblem(type);
             if (problem is not null)
@@ -472,19 +485,25 @@ internal sealed class TemplateResolver
     private Pair? PairFor(ITypeSymbol type, INamedTypeSymbol owner, Site origin, out string? problem)
     {
         problem = null;
-        if (!SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, _compilation.Assembly))
-        {
-            problem = "its [Template] is declared in another assembly";
-            return null;
-        }
         var name = TemplateOf(owner)!;
-        if (SymbolEqualityComparer.Default.Equals(type, owner))
+        var assembly = owner.ContainingAssembly;
+        if (!SymbolEqualityComparer.Default.Equals(assembly, _compilation.Assembly))
         {
-            return _pairs.TryGetValue(Key(type, name), out var pair) ? pair : null;
+            if (!Carried(assembly).TryGetValue(name, out var carried))
+            {
+                problem = $"its [Template] is declared in assembly '{assembly.Name}', which carries no text for template '{name}'";
+                return null;
+            }
+            problem = HostProblem(type);
+            return problem is null ? Reach(type, carried, origin) : null;
         }
         if (!_templates.TryGetValue(name, out var declared))
         {
             return null;
+        }
+        if (SymbolEqualityComparer.Default.Equals(type, owner))
+        {
+            return _pairs.TryGetValue(Key(type, declared), out var pair) ? pair : null;
         }
         problem = HostProblem(type);
         return problem is null ? Reach(type, declared, origin) : null;
@@ -493,7 +512,7 @@ internal sealed class TemplateResolver
     private Pair Reach(ITypeSymbol type, Declared template, Site origin)
     {
         type = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
-        var key = Key(type, template.Name);
+        var key = Key(type, template);
         if (!_pairs.TryGetValue(key, out var pair))
         {
             pair = new Pair(type, template, origin);
@@ -507,7 +526,11 @@ internal sealed class TemplateResolver
     {
         var outputs = ImmutableArray.CreateBuilder<TemplateOutput>();
         var none = new EquatableArray<Finding>(Array.Empty<Finding>());
-        foreach (var group in _pairs.Values.GroupBy(p => p.Template).OrderBy(g => g.Key.Name, StringComparer.Ordinal))
+        var groups = _pairs.Values
+            .GroupBy(p => p.Template)
+            .OrderBy(g => g.Key.Name, StringComparer.Ordinal)
+            .ThenBy(g => g.Key.HintName, StringComparer.Ordinal);
+        foreach (var group in groups)
         {
             var pairs = group.OrderBy(p => Qualified(p.Type), StringComparer.Ordinal).ToList();
             outputs.Add(new TemplateOutput(group.Key.HintName, Emit(group.Key, pairs), none));
@@ -519,11 +542,20 @@ internal sealed class TemplateResolver
         }
         var interceptors = EmitInterceptors(_pairs.Values
                                                 .OrderBy(p => p.Template.Name, StringComparer.Ordinal)
+                                                .ThenBy(p => p.Template.HintName, StringComparer.Ordinal)
                                                 .ThenBy(p => Qualified(p.Type), StringComparer.Ordinal),
                                             resolvers);
         if (interceptors.Length > 0)
         {
             outputs.Add(new TemplateOutput(InterceptorsHintName, interceptors, none));
+        }
+        var named = _named
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .Select(n => _templates[n])
+            .ToList();
+        if (named.Count > 0)
+        {
+            outputs.Add(new TemplateOutput(TemplatesHintName, EmitTexts(named), none));
         }
         if (_findings.Count > 0)
         {
@@ -657,6 +689,22 @@ internal sealed class TemplateResolver
         return count + 1;
     }
 
+    private static string EmitTexts(List<Declared> templates)
+    {
+        var source = new StringBuilder();
+        source.Append("// <auto-generated/>\n")
+              .Append("#nullable enable\n\n");
+        foreach (var template in templates)
+        {
+            source.Append("[assembly: global::Templar.Rendering.TemplateTextAttribute(\"")
+                  .Append(TemplateCompiler.EscapeLiteral(template.Name))
+                  .Append("\", \"")
+                  .Append(TemplateCompiler.EscapeLiteral(template.Text))
+                  .Append("\")]\n");
+        }
+        return source.ToString();
+    }
+
     private void Report(string id, Site site, params string[] arguments)
     {
         _findings.Add(new Finding(id, site, new EquatableArray<string>(arguments)));
@@ -731,6 +779,28 @@ internal sealed class TemplateResolver
         return attribute is null ? null : NameIn(attribute) ?? "";
     }
 
+    private Dictionary<string, Declared> Carried(IAssemblySymbol assembly)
+    {
+        if (_carried.TryGetValue(assembly, out var cached))
+        {
+            return cached;
+        }
+        var result = new Dictionary<string, Declared>(StringComparer.Ordinal);
+        foreach (var attribute in assembly.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != TextAttributeName
+                || attribute.ConstructorArguments.Length != 2
+                || attribute.ConstructorArguments[0].Value is not string name
+                || attribute.ConstructorArguments[1].Value is not string text)
+            {
+                continue;
+            }
+            result[name] = new Declared(name, "", text, _rootNamespace, assembly.Name);
+        }
+        _carried[assembly] = result;
+        return result;
+    }
+
     private static INamedTypeSymbol? Owner(ITypeSymbol type)
     {
         if (type is not INamedTypeSymbol named)
@@ -768,9 +838,22 @@ internal sealed class TemplateResolver
             {
                 result.Add(named);
             }
-            if (SymbolEqualityComparer.Default.Equals(named.ContainingAssembly, _compilation.Assembly))
+            if (named.ContainingAssembly is { } assembly)
             {
-                result.AddRange(SourceTypes().Where(t => IsConcrete(t) && Derives(t, named)));
+                var here = SymbolEqualityComparer.Default.Equals(assembly, _compilation.Assembly);
+                var carries = !here && Carried(assembly).Count > 0;
+                if (here || carries)
+                {
+                    var subtypes = SourceTypes(_compilation.Assembly)
+                        .Where(t => IsConcrete(t) && Derives(t, named));
+                    result.AddRange(subtypes);
+                }
+                if (carries)
+                {
+                    var subtypes = SourceTypes(assembly)
+                        .Where(t => IsConcrete(t) && Derives(t, named));
+                    result.AddRange(subtypes);
+                }
             }
         }
         result.Sort(MostDerivedFirst);
@@ -853,9 +936,9 @@ internal sealed class TemplateResolver
         return null;
     }
 
-    private static string Key(ITypeSymbol type, string template)
+    private static (string Type, Declared Template) Key(ITypeSymbol type, Declared template)
     {
-        return Qualified(type) + "\n" + template;
+        return (Qualified(type), template);
     }
 
     private static string Qualified(ITypeSymbol type)
@@ -975,15 +1058,15 @@ internal sealed class TemplateResolver
         }
     }
 
-    private List<INamedTypeSymbol> SourceTypes()
+    private List<INamedTypeSymbol> SourceTypes(IAssemblySymbol assembly)
     {
-        if (_sourceTypes is not null)
+        if (_sourceTypes.TryGetValue(assembly, out var cached))
         {
-            return _sourceTypes;
+            return cached;
         }
         var result = new List<INamedTypeSymbol>();
         var pending = new Stack<INamespaceOrTypeSymbol>();
-        pending.Push(_compilation.Assembly.GlobalNamespace);
+        pending.Push(assembly.GlobalNamespace);
         while (pending.Count > 0)
         {
             var current = pending.Pop();
@@ -1002,7 +1085,7 @@ internal sealed class TemplateResolver
             }
         }
         result.Sort((a, b) => string.CompareOrdinal(a.ToDisplayString(), b.ToDisplayString()));
-        _sourceTypes = result;
+        _sourceTypes[assembly] = result;
         return result;
     }
 }

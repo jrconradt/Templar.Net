@@ -116,7 +116,7 @@ public sealed class HierarchyTests
         var run = Generate(source, ("/proj/Templates/Card.tpl", "{{ main }}: {{ shapes }}"));
 
         Assert.Empty(run.Diagnostics);
-        Assert.Equal(new[] { "Card.g.cs", "Circle.g.cs", "Square.g.cs", "Templar.Interceptors.g.cs", "Templar.Resolvers.g.cs" },
+        Assert.Equal(new[] { "Card.g.cs", "Circle.g.cs", "Square.g.cs", "Templar.Interceptors.g.cs", "Templar.Resolvers.g.cs", "Templar.Templates.g.cs" },
                      run.Sources.Keys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray());
         var card = run.Sources["Card.g.cs"];
         Assert.Contains("        yield return w.Compose(model.Main, global::App.Templates.Resolvers.App_IShapeResolver.Steps);\n", card);
