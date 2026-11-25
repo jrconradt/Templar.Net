@@ -106,7 +106,7 @@ public class EmissionTests
     {
         var run = Generate();
         Assert.Empty(run.Diagnostics);
-        Assert.Equal(new[] { "Card.g.cs", "Item.g.cs", "Tag.g.cs", "Templar.Interceptors.g.cs" },
+        Assert.Equal(new[] { "Card.g.cs", "Item.g.cs", "Tag.g.cs", "Templar.Interceptors.g.cs", "Templar.Templates.g.cs" },
                      run.Sources.Keys.OrderBy(k => k, System.StringComparer.Ordinal).ToArray());
 
         foreach (var (hint, text) in run.Sources)

@@ -99,19 +99,24 @@ site that names the template line.
 spot whose property has that declared type renders the property's value by it, a list
 of the type renders each item by it, and `Compositor.ResolveTemplate(obj)` renders by
 it. The type must carry what the template uses; that is checked at compile time, as
-for a root. The name is searched only among this project's templates, and a
-`[Template]` type declared in another assembly cannot render here (`TMPLR008`). The
+for a root. The name is searched only among the templates of the project that declares
+the type. A `[Template]` type of a referenced assembly renders here too: that assembly
+carries the text of each template its `[Template]` types name, and the generator
+compiles and checks the pair in this project like any other
+([integration.md](integration.md#pairs)). A type whose `[Template]` is declared in an
+assembly that carries no text for its template cannot render here (`TMPLR008`). The
 type stays plain otherwise: no base class, no interface, no `partial`.
 
 ## The hierarchy
 
 A property or list declared as a base type renders each value by the template of the
-value's own type. At compile time the generator collects every type of this project a
-value of the declared type can be: the type itself if it is concrete, and every
-concrete class or record that derives from it or implements it. Each one renders by the
-most-derived `[Template]` in its own chain — its own, else its base class's, else an
-interface's — so a subtype without one inherits its base's, and an abstract class or
-interface in between lends its `[Template]` to the types below it.
+value's own type. At compile time the generator collects, for the declared type, the
+type itself if it is concrete and, when it is declared in this project or in a
+referenced assembly that carries template text, every concrete class or record that
+derives from it or implements it, of this project and, for the latter, of that assembly.
+Each one renders by the most-derived `[Template]` in its own chain — its own, else its
+base class's, else an interface's — so a subtype without one inherits its base's, and an
+abstract class or interface in between lends its `[Template]` to the types below it.
 
 `Templates/Orders/Stocked.tpl` is `stocked {{ sku }}`; `Templates/Orders/Backordered.tpl`
 is `backordered {{ sku }}` and `    eta {{ eta }}` on two lines.
@@ -153,8 +158,11 @@ on a base-typed variable resolves the same way; `Compositor.ResolveTemplate(obj,
 "Name")` renders by the named template, checked against the static type.
 
 A concrete type in the set with no `[Template]` in its chain is a compile-time error
-(`TMPLR008`) at the spot, naming that type. Only a declared type of this project
-collects subtypes: a property typed `object` is still an error.
+(`TMPLR008`) at the spot, naming that type. Only a declared type of this project, or of
+a referenced assembly that carries template text, collects subtypes: from this project
+and, for the latter, from that assembly too. A subtype a third assembly declares is not
+collected: it has no arm of its own in a resolver, which throws for a value no arm
+matches. A property typed `object` is still an error.
 
 ## How a spot is written
 
@@ -166,14 +174,15 @@ property's **declared** type, once, at compile time:
 |---------------|-------|
 | `string` | Text; continuation lines take the spot's column. Never rescanned — a `{{ x }}` inside a value is output as written. |
 | `bool`, `char`, a numeric type, an enum, or one of these nullable | Text, formatted with the invariant culture (`ToString()` for `bool` and `char`). |
-| A class or interface of this project with a `[Template]` in its hierarchy | Each value by its own type's template ([the hierarchy](#the-hierarchy)), at the spot's column. |
+| A class or interface with a `[Template]` in its chain or, when it is of this project or of a referenced assembly that carries template text, in the chain of a subtype collected for it | Each value by its own type's template ([the hierarchy](#the-hierarchy)), at the spot's column. |
 | `Sequence<T>` | Each item by `T`'s write, joined by the sequence's separator. |
 | `IEnumerable<T>` (a list, an array, …) | Each item by `T`'s write, one per line. |
 
 A `null` value, or an empty list, writes nothing. Anything else — `object`, a type
-with no `[Template]` in its hierarchy, a `[Template]` type from another assembly, a
-type with a concrete subtype that has no `[Template]` in its chain — is a compile-time
-error (`TMPLR008`). A property no spot names is not rendered.
+with no `[Template]` in its hierarchy, a type whose `[Template]` is declared in an
+assembly that carries no text for its template, a type with a concrete subtype that has
+no `[Template]` in its chain — is a compile-time error (`TMPLR008`). A property no spot
+names is not rendered.
 
 ## Lists
 
